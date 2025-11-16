@@ -1,0 +1,44 @@
+{
+  "pairs": {
+    "ADAUSDT": {
+      "1h": {
+        "candles": 7877,
+        "downloaded_at": "2025-11-13T21:25:31Z",
+        "file": "ADAUSDT_1h.csv",
+        "history_span_days": 365,
+        "interval": "1h",
+        "source": "CryptoDataDownload:Binance",
+        "symbol": "ADAUSDT",
+        "timestamp_end": "2025-11-12T23:00:00Z",
+        "timestamp_start": "2024-11-13T22:00:00Z"
+      }
+    },
+    "BTCUSDT": {
+      "1h": {
+        "candles": 8100,
+        "downloaded_at": "2025-11-13T21:25:28Z",
+        "file": "BTCUSDT_1h.csv",
+        "history_span_days": 365,
+        "interval": "1h",
+        "source": "CryptoDataDownload:Binance",
+        "symbol": "BTCUSDT",
+        "timestamp_end": "2025-11-12T23:00:00Z",
+        "timestamp_start": "2024-11-13T22:00:00Z"
+      }
+    },
+    "XRPUSDT": {
+      "1h": {
+        "candles": 7788,
+        "downloaded_at": "2025-11-13T21:25:29Z",
+        "file": "XRPUSDT_1h.csv",
+        "history_span_days": 365,
+        "interval": "1h",
+        "source": "CryptoDataDownload:Binance",
+        "symbol": "XRPUSDT",
+        "timestamp_end": "2025-11-12T23:00:00Z",
+        "timestamp_start": "2024-11-13T22:00:00Z"
+      }
+    }
+  },
+  "version": 1
+}

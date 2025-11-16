@@ -1,0 +1,52 @@
+--- a/core/results.py
++++ b/core/results.py
+@@ -1,6 +1,9 @@
+ from dataclasses import dataclass, asdict
+ from typing import List, Dict
+ from decimal import Decimal
+ import pandas as pd
+ import os
+ import numpy as np
++from decimal import Decimal
++from typing import List
++
+ 
+ @dataclass
+ class TradeLog:
+@@ -36,6 +39,23 @@ class BacktestResult:
+     equity_curve: List[Decimal]  # NEW: for sharpe
+     trades: List[TradeLog]
+ 
++    def _calc_sharpe(self, risk_free_rate_pct: float = 0.0) -> float:
++        """
++        Annualized Sharpe ratio.
++        risk_free_rate_pct: annual % (e.g. 5.0 for 5%)
++        """
++        if len(self.equity_curve) < 2:
++            return 0.0
++
++        equity = np.array([float(e) for e in self.equity_curve])
++        returns = np.diff(equity) / equity[:-1]
++
++        if len(returns) == 0 or np.std(returns) == 0:
++            return 0.0
++
++        excess = np.mean(returns) - (risk_free_rate_pct / 100) / (365 * 24)
++        std = np.std(returns)
++        sharpe = excess / std * np.sqrt(365 * 24)
++        return round(float(sharpe), 2)
++
+     def summary_str(self) -> str:
+         total_pnl = self.final_equity - Decimal("100.0")
+         lines = [
+@@ -46,8 +66,8 @@ class BacktestResult:
+             f"Final: ${self.final_equity:,.2f}",
+             f"Return: {self.total_return_pct:+.2f}%",
+             f"Trades: {self.total_trades}",
+-            f"Winrate: {self.winrate:.1f}%",
+-            f"Sharpe: {self.sharpe:.2f}",
++            f"Winrate: {self.winrate:.1f}%",
++            f"Sharpe: {self._calc_sharpe():.2f}",
+             f"Max DD: ${self.max_dd:,.2f} ({self.max_dd_pct:.2f}%)",
+             f"Total Regime Changes: {self.regime_changes}",
+             "Regimes:",

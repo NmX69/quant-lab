@@ -1,0 +1,24 @@
+{
+  "name": "Ranging Stochastic",
+  "regime": "ranging",
+  "direction": "both",
+  "entry": {
+    "conditions": [
+      { "type": "stochastic_cross", "direction": "up", "below": 20 },
+      { "type": "rsi", "below": 40 },
+      { "type": "price_near_bb_lower" }
+    ]
+  },
+  "exit": {
+    "signal_exit": [
+      { "type": "stochastic_cross", "direction": "down", "above": 80 }
+    ],
+    "stop_loss": "mode_stop",
+    "take_profit": "mode_tp",
+    "partial_exit": 0.0
+  },
+  "risk": {
+    "sizing": "equity_pct",
+    "risk_per_trade_pct": 0.5
+  }
+}
