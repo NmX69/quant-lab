@@ -1,52 +1,37 @@
+diff --git a/core/results.py b/core/results.py
+index 6d1a6a1..e4f5b2c 100644
 --- a/core/results.py
 +++ b/core/results.py
-@@ -1,6 +1,9 @@
- from dataclasses import dataclass, asdict
- from typing import List, Dict
- from decimal import Decimal
- import pandas as pd
- import os
- import numpy as np
-+from decimal import Decimal
-+from typing import List
-+
- 
- @dataclass
- class TradeLog:
-@@ -36,6 +39,23 @@ class BacktestResult:
+@@ -45,6 +45,22 @@
      equity_curve: List[Decimal]  # NEW: for sharpe
      trades: List[TradeLog]
  
-+    def _calc_sharpe(self, risk_free_rate_pct: float = 0.0) -> float:
-+        """
-+        Annualized Sharpe ratio.
-+        risk_free_rate_pct: annual % (e.g. 5.0 for 5%)
-+        """
-+        if len(self.equity_curve) < 2:
++    def _calc_time_under_water_hours(self) -> float:
++        """Returns total hours equity was below all-time high."""
++        if not self.equity_curve:
 +            return 0.0
 +
-+        equity = np.array([float(e) for e in self.equity_curve])
-+        returns = np.diff(equity) / equity[:-1]
++        equity = [float(e) for e in self.equity_curve]
++        peak = equity[0]
++        under_water = 0
++        for val in equity[1:]:
++            if val < peak:
++                under_water += 1
++            else:
++                peak = max(peak, val)
++        return round(under_water, 1)
 +
-+        if len(returns) == 0 or np.std(returns) == 0:
-+            return 0.0
 +
-+        excess = np.mean(returns) - (risk_free_rate_pct / 100) / (365 * 24)
-+        std = np.std(returns)
-+        sharpe = excess / std * np.sqrt(365 * 24)
-+        return round(float(sharpe), 2)
-+
-     def summary_str(self) -> str:
-         total_pnl = self.final_equity - Decimal("100.0")
-         lines = [
-@@ -46,8 +66,8 @@ class BacktestResult:
+     def save_trades(self, output_dir: str):
+         os.makedirs(output_dir, exist_ok=True)
+         df = pd.DataFrame([t.to_dict() for t in self.trades])
+@@ -61,6 +77,7 @@
              f"Final: ${self.final_equity:,.2f}",
              f"Return: {self.total_return_pct:+.2f}%",
              f"Trades: {self.total_trades}",
--            f"Winrate: {self.winrate:.1f}%",
--            f"Sharpe: {self.sharpe:.2f}",
-+            f"Winrate: {self.winrate:.1f}%",
-+            f"Sharpe: {self._calc_sharpe():.2f}",
+             f"Winrate: {self.winrate:.1f}%",
+             f"Sharpe: {self.sharpe:.2f}",
++            f"Time Under Water: {self._calc_time_under_water_hours():.1f}h",
              f"Max DD: ${self.max_dd:,.2f} ({self.max_dd_pct:.2f}%)",
              f"Total Regime Changes: {self.regime_changes}",
              "Regimes:",

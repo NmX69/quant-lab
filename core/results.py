@@ -4,6 +4,8 @@
 from dataclasses import dataclass, asdict
 from typing import List, Dict
 from decimal import Decimal
+import numpy as np
+
 import pandas as pd
 import os
 import numpy as np
