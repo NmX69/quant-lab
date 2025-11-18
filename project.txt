@@ -1,278 +1,502 @@
-Version v0.2
+PROJECT.TXT — Quant Lab Master Specification
+Version v0.3 (2025–CURRENT)
 
 0. AI USAGE INSTRUCTIONS — STRICT RULESET
 
-Every time you read this file, print to user line 1 above (Version) to ensure up to date
+Every time you read this file, PRINT THE VERSION LINE ABOVE.
+This verifies the AI is using the correct revision.
 
-These rules apply to all AI systems used on this project:
-ChatGPT, Grok, Gemini, Claude, local models, etc.
+This section overrides everything else.
+It governs ChatGPT, Grok, Claude, Gemini, local models, agent-mode systems, and all future tooling.
 
-This section overrides everything else and is the governing authority for all AI behavior.
+Violating any rule in Section 0 invalidates the output.
 
 0.1 Mandatory Operational Rules
 
-Every AI must:
+Every AI working on Quant Lab must:
 
-Read the entire Quant Lab Master Document before writing code.
+0.1.1 Read First
 
-Follow the current phase exactly.
-No jumping ahead, no mixing phases, no pre-building future modules.
+Read the entire project.txt before writing code.
 
-Modify only files explicitly relevant to the active phase.
+Confirm active phase before making changes.
 
-Preserve all core architecture principles:
+0.1.2 Follow Active Phase Only
 
-unified engine
+Execute only the current phase.
 
-declarative strategy plug-ins (SDL/JSON)
+No jumping ahead.
 
-regime-aware logic
+No scaffolding for future phases.
 
-portfolio-level hierarchy
+No “helpful” redesigns unless asked.
 
-transparent canonical logging
+0.1.3 File Modification Rules
 
-clean separation between engine logic and strategy definitions
+Only modify files explicitly requested by the user.
 
-Ask clarifying questions when any file or requirement is ambiguous.
+Never change unrelated modules.
 
-Never assume missing files — always request them.
+Never rename files or directories unless ordered.
 
-Never refactor or restructure the entire project unless explicitly ordered.
+0.1.4 Preserve Core Architecture
 
-Treat this document as the single source of truth.
-No reinterpretation, no silent changes, no “improvements” unless requested.
+The following principles are immutable:
 
-0.1.1 Canonical Master Spec File
+Unified backtest engine architecture
 
-The canonical master specification file for this project is named: project.txt.
+JSON/SDL-based strategies (no logic in Python)
 
-Any AI working on Quant Lab must treat project.txt as the authoritative project spec and ensure it is read and followed before code generation.
+Regime-aware structure everywhere
 
-0.2 Full-File Output & Version Tagging Standard (REQUIRED)
+Canonical trade logging
 
-All code produced MUST follow these rules:
+Clean separation:
 
-0.2.1 Full-File Replacements & Diff's
-Diff workflow STRICT ADHERENCE REQUIRED:
-  1. User provides direction (error to fix, or to proceed to next phase, etc)
-  2. AI responds with:
-    A. Answers any questions from prompt
-    B. Then provides summary of problem
-    C. Then provides summary of necessary changes
-    D. THEN ASKS FOR THE CURRENT COPY OF FILES TO BE CHANGED
-  3. User provides files (either pasted or upload)
-  4. AI creates diff based on desired changes and current file
-    A. Accuracy is paramount as malformed diff's won't apply and create their own problems.
-    B. After creating a diff, apply internally in python sandbox and confirm it applies without error
-    C. Provide the diff to the user in a code block
-    D. Assume the user will apply the diff with the following command from the project root directory
-    patch -p1 < diff.patch
-  5. User will apply diff and communicate any errors applying diff, or if successful, the result of testing after applying diff.
-  6.  If diff gave errors when applying, reanalyze the original file given by the user and the diff you gave the user and determin why it failed and give the user feedback on how to change this protocol to prevent future diff creation failures.
+Engine logic
 
-If giving a full file is more appropriate or if user requests:
-Every modified file must be output as a complete, independent, copy-pasteable block.
+Strategy DSL
 
-One file per code block, clearly labeled:
+Indicators
+
+GUI
+
+Reporting
+
+State
+
+Clear module boundaries (no “bleed” between concerns)
+
+0.1.5 Ask Questions
+
+If anything is ambiguous, the AI must ask for clarification.
+
+0.1.6 Never Assume Missing Files
+
+If a referenced module is not provided, the AI must request it.
+
+0.2 File Output Protocol
+0.2.1 Full-File Replacement — PREFERRED
+
+Unless the user explicitly requests a diff, AI must:
+
+Answer questions first (analysis before code).
+
+Summarize the problem.
+
+Summarize required changes.
+
+Request the current version of each file to be modified.
+
+Output complete replacement files, one per code block:
 
 # FILE: core/engine.py
 <entire file>
 
-# FILE: backtester.py
-<entire file>
 
+Only modify the files requested.
 
-If the user asks for one file, output exactly one file.
+0.2.2 Diff Workflow — OPTIONAL
 
-Never modify more files than requested.
+Use diffs only when the user requests them.
+If using diffs:
 
-0.2.2 Trailing Version Comment (Per-File)
+AI must test-apply the diff internally before output.
 
-To make it visually obvious that the user is pasting the next version of a file, every file must end with a version comment line, using a simple incrementing version number.
+If diff fails when user applies it, AI must analyze why.
 
-For Python and other #-comment languages (e.g. .py):
+0.2.3 Required File Footer Version Tag
 
-# core/engine.py v0.1
+Every Python file ends with:
 
-
-Next edit to that same file:
-
-# core/engine.py v0.2
+# core/engine.py v0.4
 
 
 Rules:
 
-The version comment must be the last line of the file.
+Must be the final line.
 
-The version must increment monotonically for that file: v0.1, v0.2, v0.3, etc.
+Version increments monotonically.
 
-The path in the comment should match the logical repo path (e.g., core/engine.py, backtester.py).
+Path must match the actual file path.
 
-For files where # is not valid but comments are allowed (e.g., some config formats), use the appropriate comment syntax, keeping the same versioning pattern.
+JSON files cannot have comments.
 
-For pure JSON (e.g., SDL strategy files), no inline comments are allowed. Those may later adopt an explicit "__version__" field or separate version manifest, but that will require an explicit spec change (see 0.4).
+0.2.4 Required File Header Format (Per-File)
+
+Every Python file in the Quant Lab project must begin with a 3–4 line
+header using this exact convention:
+
+# core/engine.py
+# Purpose: <one clear sentence describing what this file does>
+# Major APIs: <comma-separated list of externally used functions/classes/objects>
+# Notes: <optional extra info, may be blank>
+
+Rules:
+
+- The first line must match the logical repo path (e.g., core/sizing.py).
+- Purpose must be a single clear sentence describing the module’s responsibility.
+- Major APIs must include only the public interface intended to be imported or used by other modules.
+- Notes is optional and may include constraints, future concerns, or AI guidance.
+- No executable code may appear before the header.
+- Header must be updated whenever a refactor changes the purpose or API surface.
+
+For Example:
+# core/engine.py
+# Purpose: High-level orchestrator for running backtests; delegates real logic to submodules.
+# Major APIs: run_backtest
+# Notes: Must remain thin; heavy logic lives in sizing/conditions/exits/state.
+
 
 0.3 Phase Lockout Protocol
 
-The project phases form a strict sequential pipeline:
+Only the active phase may be worked on.
 
-Only the active phase may be executed.
+Closed phases cannot be modified.
 
-Future phases may not be implemented or partially built.
+Future phases cannot be implemented early.
 
-No retroactive changes to closed phases unless explicitly ordered.
+A phase is complete only when the user declares it complete.
 
-A phase is considered complete only when the user declares it complete.
+0.4 Strategy / SDL Governance
 
-0.4 Strategy / SDL Governance & Evolution
+Strategies are JSON-only plug-ins.
 
-AIs must:
+AI must:
 
-Preserve the existing JSON SDL schema.
+Preserve schema.
 
-Not invent new fields, operators, or structures without explicit approval.
+Never alter JSON structure without explicit approval.
 
-Keep all strategy behavior and parameters in JSON/SDL, not Python.
+Never add new fields/operators/conditions without approval.
 
-Maintain strict modularity: strategies may not contain engine/business logic.
+Never move logic from JSON into Python.
 
-Ensure any proposed change to the SDL (e.g., adding a "__version__" field or new condition types) is:
+SDL Evolution Procedure
 
-Explicitly described in natural language.
+To modify the DSL:
 
-Approved by the user.
+AI proposes change in English.
 
-Written into project.txt as an updated spec section before being used.
+User approves.
 
-No silent evolution of the SDL is allowed.
+AI updates project.txt with a new SDL spec section.
 
-0.5 Architecture & Engine Safety Requirements
+Only then can Python/JSON changes be made.
 
-Before producing any code, the AI must ensure:
+0.5 Architectural Safety
 
-No cross-module side effects outside the requested scope.
+Before writing code, AI must ensure:
 
-No renaming of directories, modules, classes, or functions.
+No cross-module side effects
 
-No new external dependencies without explicit approval.
+No silent global changes
 
-No changes that alter the architecture or directory structure.
+No addition of external dependencies
 
-No changes that impact components outside the active phase.
+No changes to directory layout
 
-0.6 AI Operating Style Requirements
+No performance regressions
 
-The AI must:
+No removal of canonical logging fields
 
-Answer user questions and provide any requested analysis before emitting code blocks.
+0.6 AI Workstyle Requirements
 
-The explanation/analysis comes first.
+AI must:
 
-Code files come after that, as clearly labeled full-file blocks.
+Be concise, analytical, and incremental.
 
-Reason incrementally and avoid scope creep.
+Avoid scope creep.
 
-Respect all existing design decisions and only propose changes when asked.
+Keep explanations and code separated.
 
-Provide a brief justification for how each modification fits the current phase.
+Never output code before analysis.
 
-Ask for missing context before guessing.
+Justify why each change is appropriate for the current phase.
 
-0.7 Conditions Where AI Must Decline Code Generation
+0.7 When AI Must Decline
 
-The AI must refuse to write code when:
+AI must refuse code when:
 
-Required files haven’t been provided.
+Missing context or missing files
 
-The user requests work from a future or locked phase.
+User asks for work from a locked or future phase
 
-The request breaks architecture rules.
+Task violates architectural rules
 
-The task is ambiguous or underspecified.
+Request is ambiguous
 
-In these cases, the AI must explain why and request clarification.
+AI should explain the reason and request clarification.
 
 0.8 Enforcement Clause
 
-Any AI output that violates Section 0 is invalid and must be discarded.
-
-Only outputs consistent with these rules are considered authoritative contributions to the Quant Lab project.
-
-📄 Quant Lab — Unified Master Project Definition & AI Context Document
-
-VERSION: 2025–CURRENT (AUTO-SYNC)
+Any output violating Section 0 is invalid and must be discarded.
 
 1. PROJECT OVERVIEW
 
-Quant Lab is a unified, multi-strategy cryptocurrency quant research platform and future automated trading execution engine.
+Quant Lab is a unified research and backtesting environment for multi-strategy cryptocurrency systems.
 
-Its goals:
+Mission:
 
-Run large-scale research on trading strategies across many assets & regimes
+Run high-volume backtests across many assets
 
-Identify which strategies perform best in which conditions
+Evaluate strategies by regime and asset
 
-Build a complete analytics suite (expectancy, Sortino, streaks, matrices)
+Provide institutional-quality metrics
 
-Perform parameter optimization & asset/strategy mapping
+Prepare for future portfolio engine and live trading
 
-Run a unified portfolio-level engine across all timeframes
+Core Philosophy:
 
-Eventually trade live (spot + futures) with industrial safety controls
+Research-first
 
-This is not a toy bot.
-It is a mini hedge-fund-grade quant lab designed for personal use.
+JSON strategy plug-ins
+
+Transparent logging
+
+Regime-aware logic
+
+Strong separation of concerns
+
+Extensible long-term architecture
 
 2. CORE DESIGN PRINCIPLES
 
-Single Unified Engine (not many one-off bots)
+Unified Engine: Only one backtesting engine.
 
-Strategies as plug-ins via JSON/SDL (no Python edits required)
+Strategy Plug-ins: Strategies defined only in JSON (SDL).
 
-Regime-aware logic everywhere
+Regime Awareness: Search all conditions through a regime lens.
 
-Portfolio-level risk controls
+Portfolio-Level Extensions: Reserved for future phases.
 
-Timeframe-independent execution (1m → weekly)
+Timeframe Agnostic: Works for 1m → 1w.
 
-Asset-specific tuning & mappings
+Transparent Logs: Every decision captured in TradeLog.
 
-Transparent decision-making (full trade logs)
+Scalable Architecture: Refactor completed to support future phases without monolithic files.
 
-Research-first philosophy (robust analytics before automation)
+3. CURRENT CODE ARCHITECTURE (AFTER REFACTOR)
 
-3. CURRENT CODE ARCHITECTURE (FROM REPO ANALYSIS)
-
-Your hosted repo contains these verified components:
+This is the authoritative module map.
+Updated to match the project as of 2025-11.
 
 Top-Level
+quant_lab.py
 
-backtester.py — GUI backtester (regime routing, portfolio mode, equity curve, CSV export)
+Main entrypoint.
 
-getdata.py — Multi-year OHLCV downloader with manifest metadata
+Creates Tkinter root and starts BacktesterGUI.
 
-verify_regime.py — CLI regime classification tool
+config.json
 
-Master_Spec.txt — Old legacy spec
+Persisted GUI + engine settings.
 
-README.md — Basic overview
+Managed exclusively by core/config_manager.py.
+
+getdata.py
+
+Multi-year OHLCV downloader.
+
+Generates manifest.json.
+
+verify_regime.py
+
+CLI tool for verifying regime detection.
+
+README.md
+
+Project overview.
+
+project.txt
+
+This file — canonical spec.
+
+project_tree.txt
+
+High-level file-purpose map.
+
+Useful for new AI sessions.
 
 core/
+core/engine.py
 
-engine.py — Backtest core (strategies, ATR stops, R:R, PnL, routing)
+High-level orchestrator for backtests.
 
-indicators.py — Technical indicators + regime detection
+Coordinates sizing, conditions, exits, and state.
 
-regime_router.py — Strategy selection module (regime → active strategy)
+Calls helper modules; contains no heavy logic.
 
-strategy_loader.py — JSON-based strategy DSL loader
+core/sizing.py
 
-results.py — TradeLog dataclass + CSV logging + summaries
+All position-sizing and risk model logic.
+
+Supports equity_pct sizing model.
+
+Computes stop distances and take-profit, per GUI inputs.
+
+core/conditions.py
+
+All indicator-based condition evaluation.
+
+invert_condition() and evaluate_condition().
+
+Supports MACD/EMA/Stoch/RSI/BB/ADX/etc.
+
+core/exits.py
+
+All exit logic:
+
+Take profit
+
+Stop loss
+
+Trailing stop
+
+Signal-based exits
+
+End-of-simulation closing
+
+Builds TradeLog with canonical fields.
+
+core/state.py
+
+Tracks:
+
+Position
+
+Capital
+
+High/low watermarks
+
+Entry metadata
+
+Regime counters
+
+Equity curve
+
+Trailing stop state
+
+core/results_builder.py
+
+Computes:
+
+Winrate
+
+Sharpe
+
+Max DD
+
+Final return
+
+Builds BacktestResult and summary text.
+
+core/backtest_runner.py
+
+Non-GUI orchestration layer for:
+
+Single backtest
+
+All strategies on one asset
+
+All assets for one strategy
+
+Used only by GUI.
+
+core/config_manager.py
+
+Reads/writes config.json.
+
+Provides:
+
+PROJECT_ROOT
+
+DATA_DIR
+
+RESULTS_DIR
+
+MANIFEST_FILE
+
+core/indicators.py
+
+Adds indicators (MACD, EMAs, RSI, Stoch, BB, ADX).
+
+Adds regime classification.
+
+Must be called before backtesting.
+
+core/strategy_loader.py
+
+Loads JSON strategy files.
+
+list_strategies(), get_strategy().
+
+core/regime_router.py
+
+Returns correct strategy JSON based on regime.
+
+core/results.py
+
+Data models:
+
+TradeLog
+
+BacktestResult
+
+Handles CSV save and summary_str().
+
+gui/
+gui/backtester_gui.py
+
+Main GUI class.
+
+Manages:
+
+File/timeframe/strategy selection
+
+Router controls
+
+Mode selection
+
+Position/risk/RR sliders
+
+Run buttons
+
+Output text
+
+Matplotlib canvas
+
+Calls backtest_runner functions.
+
+gui/layout.py
+
+Builds left and right UI panels.
+
+Extracted to reduce backtester_gui size.
+
+gui/styles.py
+
+ttk style/theme setup.
+
+Colors, fonts, button/combobox styles.
+
+gui/results_display.py
+
+Equity curve plotting
+
+Summary formatting for tables
 
 strategies/
 
-Working SDL strategy definitions:
+JSON strategy files defining:
+
+Entry conditions
+
+Exit conditions
+
+Risk parameters
+
+Current working strategies:
 
 trend_macd.json
 
@@ -281,328 +505,159 @@ range_rsi_bb.json
 trending_ema_crossover.json
 
 ranging_stochastic.json
+(And others as added.)
 
 data/
 
-Normalized OHLCV CSV files (BTC/ETH/XRP/ADA/etc.)
+Raw OHLCV CSV files.
 
-manifest.json (dataset metadata)
-
-scanner/
-
-Empty directory placeholder for Phase H
+manifest.json describing available assets/timeframes.
 
 results/
 
-Populated with output trade logs after each backtest
+Stored trade logs (CSV) for each completed backtest.
 
-Missing (by design)
+4. PHASE ROADMAP (OFFICIAL)
+PHASE A — Canonical Trade Logging → 100% COMPLETE
 
-No live trading engine
+Includes:
 
-No futures trading
+All canonical fields (MAE/MFE, pnl_R, reward_multiple, stop_distance_pct, trade_type, hold_time_hours)
 
-No real-time scanners
+Full architecture refactor to modular engine + modular GUI
 
-No dashboard
+NEXT ACTIVE PHASE → Phase B
 
-4. ALIGNMENT WITH MASTER PLAN
+PHASE B — REPORTING ENGINE (NEXT)
 
-Your codebase already aligns ~88% with the full architecture.
+Implement core/reporting.py:
 
-✔ Already Implemented
-
-Multi-year data layer
-
-Regime-aware single-strategy backtester
-
-Strategy plug-ins (JSON/SDL)
-
-Risk model with ATR stops & R:R logic
-
-Trade logging (CSV, MAE/MFE)
-
-Regime routing engine
-
-🔶 Partially Implemented
-
-High-volatility regime detection
-
-Reporting engine (Sharpe/DD only)
-
-Multi-timeframe support
-
-SDL extensions
-
-⛔ Not Yet Implemented
-
-Optimizer
-
-Asset fitness tester
-
-Strategy–regime–asset mapping
-
-Unified portfolio engine
-
-Scanners (volume spike, moonshot, futures OI)
-
-Dashboard (TUI / web)
-
-Live trading execution
-
-Everything missing fits cleanly into the next phases.
-
-5. PHASE ROADMAP (CANONICAL)
-
-Updated based on actual code inspection.
-
-PHASE A — CANONICAL TRADE LOGGING (CURRENT PHASE — 95% COMPLETE)
-
-Add the final canonical fields:
-
-pnl_R
-
-reward_multiple
-
-stop_distance_pct
-
-take_profit_multiple
-
-hold_time_hours
-
-trade_type
-
-Goal: Fully research-grade logs.
-
-PHASE B — REPORTING ENGINE (NEXT PRIORITY)
-
-Implement core/reporting.py to compute:
-
-expectancy
-
-avg_R, avg_loss_R
+Expectancy, win/loss R
 
 Sortino, MAR
 
-volatility of returns
+Volatility of returns
 
-streak distributions
+Streaks
 
-drawdown curve
+Drawdown curve
 
-regime/per-asset/per-strategy breakdowns
+Regime breakdowns
 
-heatmaps
+Strategy/asset matrices
 
-summary exports (CSV, JSON)
+CSV + JSON exports
 
-human-readable tables
-
-plots
+Plot suite
 
 PHASE C — PARAMETER OPTIMIZER
 
-Grid or evolutionary search over:
+Grid/EA search across:
 
 R:R
 
-stop widths
+Stop widths
 
-MA/EMA spans
+EMA lengths
 
-RSI thresholds
+Stoch thresholds
+
+Volatility filters
 
 ATR multipliers
 
-volatility/trend filters
-
-Outputs best parameters for each:
-
-strategy × asset × regime × timeframe.
-
 PHASE D — ASSET FITNESS TESTER
 
-Run entire strategy catalog across top 20 assets.
 Produce:
 
-asset × strategy expectancy matrix
+Strategy × asset expectancy matrix
 
-regime distributions
+Regime distributions
 
-stability rankings
-
-recommended avoid-list
+Stability rankings
 
 PHASE E — STRATEGY–REGIME–ASSET MAPPING
 
-Auto-generate mapping:
+Autogenerate router mappings for live trading.
 
-ASSET:
-  timeframe:
-    regime: strategy@parameters
+PHASE F — SDL EVOLUTION
 
+Add:
 
-This becomes the routing logic for live trading.
+schema enforcement
 
-PHASE F — STRATEGY PLUG-IN SYSTEM (SDL/JSON – ENHANCED)
+optional inheritance
 
-Enhance DSL:
+multi-timeframe entries
 
-schema validation
-
-inheritance
-
-multi-timeframe parameters
-
-stricter condition evaluation
+new validated condition types
 
 PHASE G — UNIFIED PORTFOLIO ENGINE
 
-Parallel execution of:
-
-intraday 5m
-
-intraday 15m
-
-swing 1h/4h
-
-daily/weekly trend
-
-moonshot
-
-flash-crash reversals
-
-futures leverage strategies
-
-With:
-
-global exposure caps
-
-correlation filters
-
-position router
-
-multiple wallets
-
-unified telemetry
+Parallel intraday/swing engines with global exposure caps.
 
 PHASE H — REAL-TIME SCANNERS
 
-Implement:
-
-Volume Spike Engine
-
-Moonshot Engine
-
-Futures OI/Volume module
-
-Flash-crash reversal engine
-
-Each independent & pluggable.
+Volume spike, moonshot engine, futures OI, flash reversals.
 
 PHASE I — MULTI-TIMEFRAME SYSTEM
 
-Support for:
-
-1m
-
-5m
-
-15m
-
-1h
-
-4h
-
-1d
-
-1w
-
-Independent regime detection per timeframe.
+Combine 1m + 5m + 15m + 1h + 4h + 1d signals.
 
 PHASE J — DASHBOARD
-TUI v1
 
-engine overview
-
-equity curve
-
-open positions
-
-alerts
-
-regime changes
-
-Web v2
-
-FastAPI backend
-
-WebSockets
-
-React/Svelte UI
+CLI TUI → Web dashboard.
 
 PHASE K — LIVE EXECUTION ENGINE
 
-spot & futures support
+Spot/futures execution, slippage model, position router.
 
-order retry logic
+5. STRATEGY LIST — CURRENT & PLANNED
+Current
 
-slippage filters
+Trend-MACD
 
-kill switches
-
-heartbeat monitoring
-
-full logging
-
-high-volatility sit-out logic
-
-6. STRATEGY LIST (CURRENT & PLANNED)
-Current (working JSON/SDL strategies)
-
-mean reversion
-
-trend breakout
+Range RSI/BB
 
 EMA crossover
 
-stochastic-range systems
+Stochastic ranging
 
-regime switching
+Router modes
 
 Planned
 
-volume spike
+Volume spike
 
-flash-crash reversal
+Flash crash reversal
 
-moonshot breakout
+Moonshot breakout
 
-futures leverage engine
+Weekly trend
 
-weekly trend system
+Futures composite
 
-harmonic multi-entry/exit
+ATR multi-exit
 
-ATR trailing stop systems
+Harmonic multi-entry
 
-7. KNOWN CHALLENGES
+6. KNOWN CHALLENGES
 
-DDNS inaccessible for LLMs
+Multi-timeframe not implemented
 
 Reporting incomplete
 
-Multi-timeframe partial
-
-Scanners not implemented
-
-Optimizer not implemented
-
-Futures not implemented
+Scanners pending
 
 SDL schema incomplete
 
-8. CURRENT PHASE
+Optimizer missing
 
-Phase A: Canonical Trade Logging — 95% DONE
-Next: Phase B: Reporting Engine
+Portfolio engine missing
+
+Live trading pending
+
+7. CURRENT PHASE
+
+Phase A: COMPLETE
+Phase B: NEXT (Reporting Engine)
