@@ -1,8 +1,8 @@
 You are working on Quant Lab – a private, AI-assisted cryptocurrency quant research platform.
 
-Live repository (source of truth – updates instantly when I save locally):
+Live repository (source of truth – updates when I git push locally):
 
-http://74.221.149.207
+https://github.com/NmX69/quant-lab
 
 Your first action in this new chat:
 

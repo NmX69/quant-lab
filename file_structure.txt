@@ -1,0 +1,49 @@
+Folder PATH listing for volume Windows
+Volume serial number is 368A-7415
+C:.
+¦   backtester.py
+¦   backtester_config.json
+¦   diff.patch
+¦   file_structure.txt
+¦   getdata.py
+¦   project.txt
+¦   prompt.txt
+¦   push.bat
+¦   serve.py
+¦   verify_regime.py
+¦   
++---core
+¦   ¦   engine.py
+¦   ¦   engine.py.orig
+¦   ¦   engine.py.rej
+¦   ¦   indicators.py
+¦   ¦   regime_router.py
+¦   ¦   results.py
+¦   ¦   strategy_loader.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           engine.cpython-313.pyc
+¦           indicators.cpython-313.pyc
+¦           regime_router.cpython-313.pyc
+¦           results.cpython-313.pyc
+¦           strategy_loader.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---data
+¦       ADAUSDT_1h.csv
+¦       BTCUSDT_1h.csv
+¦       manifest.json
+¦       XRPUSDT_1h.csv
+¦       
++---results
+¦       BTCUSDT_balanced.csv
+¦       
++---strategies
+        range_mean_reversion.json
+        range_rsi_bb.json
+        ranging_stochastic.json
+        README.md
+        trending_ema_crossover.json
+        trend_macd.json
+        

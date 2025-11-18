@@ -1,9 +1,9 @@
 # core/engine.py
-# PHASE A 100% — 1% risk per trade, ATR stops from JSON, strict 1.5:1 R:R, canonical fields ready
+# PHASE A 100% — GUI-driven position %, risk %, RR; ATR sizing temporarily mapped to equity_pct.
 
 import pandas as pd
 from decimal import Decimal
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 from core.strategy_loader import get_strategy
 from core.regime_router import get_active_strategy
@@ -11,7 +11,7 @@ from core.results import BacktestResult, TradeLog
 import numpy as np
 
 STARTING_CAPITAL = Decimal("100.0")
-FEE_PCT = Decimal("0.001")
+FEE_PCT = Decimal("0.001")  # 0.1% round-trip fee model
 
 STRATEGY_TRENDING_UP = "trending_up"
 STRATEGY_TRENDING_DOWN = "trending_down"
@@ -40,8 +40,8 @@ def _safe_decimal(value, name: str = "", default: float = 0.0) -> Decimal:
 def get_mode_params(mode: str) -> Tuple[Decimal, float, float]:
     """
     Returns:
-        risk_per_trade_frac: Decimal, e.g. 0.01 = 1% of equity
-        fixed_rr: float, target reward:risk
+        risk_per_trade_frac: Decimal, e.g. 0.01 = 1% of equity (default for this mode)
+        fixed_rr: float, default reward:risk multiple
         adx_threshold: float
     """
     m = mode.lower()
@@ -49,7 +49,7 @@ def get_mode_params(mode: str) -> Tuple[Decimal, float, float]:
         return Decimal("0.02"), 4.0, 40.0
     if m == "aggressive":
         return Decimal("0.04"), 4.0, 25.0
-    # NORMAL
+    # balanced / normal
     return Decimal("0.01"), 1.5, 30.0
 
 
@@ -202,7 +202,7 @@ def _build_trade(
     except Exception:
         hold_time_hours = 0.0
 
-    # R multiple (pnl divided by risk)
+    # R multiple (pnl divided by risk) — risk is derived from entry_stop_price
     stop_dist_abs = abs(entry_price - entry_stop_price)
     risk_amount = stop_dist_abs * close_amount if stop_dist_abs > 0 else Decimal("0")
     pnl_R = float(pnl / risk_amount) if risk_amount != 0 else 0.0
@@ -234,14 +234,31 @@ def run_backtest(
     mode: str,
     strategy_name: str,
     use_router: bool = False,
-    strategy_mappings: Dict = None
+    strategy_mappings: Optional[Dict] = None,
+    position_pct: float = 15.0,   # % of equity used as position notional
+    risk_pct: float = 1.0,        # % of equity risked per trade
+    reward_rr: Optional[float] = None,  # reward:risk multiple; None -> use mode default
 ) -> Tuple[str, BacktestResult]:
     if df.empty:
         return "No data", None
 
     # --- SETUP ---
-    risk_per_trade_frac, fixed_rr_float, adx_threshold = get_mode_params(mode)
-    fixed_rr = Decimal(str(fixed_rr_float))
+    mode_risk_frac, mode_rr, adx_threshold = get_mode_params(mode)
+
+    # Position sizing fraction (e.g. 15% of equity -> 0.15)
+    position_frac = Decimal(str(max(position_pct, 0.1) / 100.0))  # guard against zero
+
+    # Risk per trade as fraction of equity (e.g. 1% -> 0.01)
+    if risk_pct is not None:
+        risk_per_trade_frac = Decimal(str(max(risk_pct, 0.01) / 100.0))
+    else:
+        risk_per_trade_frac = mode_risk_frac
+
+    # Fixed reward:risk multiple
+    if reward_rr is not None:
+        fixed_rr = Decimal(str(max(reward_rr, 0.1)))
+    else:
+        fixed_rr = Decimal(str(mode_rr))
 
     current_strategy = (
         get_active_strategy(df.iloc[0]["regime"], strategy_mappings)
@@ -252,19 +269,22 @@ def run_backtest(
     entry_conditions = current_strategy["entry"]["conditions"]
     signal_exit = current_strategy["exit"].get("signal_exit", [])
 
-    # Base exit parameters from strategy JSON (we’ll enforce 1.5R on top)
+    # Base exit parameters from strategy JSON (fallbacks; sliders override for equity_pct)
     stop_loss_pct_cfg = _safe_decimal(current_strategy["exit"].get("stop_loss", 0.03), "stop_loss", 0.03)
     take_profit_pct_cfg = _safe_decimal(current_strategy["exit"].get("take_profit", 0.18), "take_profit", 0.18)
     partial_exit_pct = _safe_decimal(current_strategy["exit"].get("partial_exit", 0.0), "partial_exit", 0.0)
     trailing_stop_pct = _safe_decimal(current_strategy["exit"].get("trailing_stop", 0.0), "trailing_stop", 0.0)
 
-    sizing = current_strategy["risk"]["sizing"]
-    max_exposure_usd = _safe_decimal(current_strategy["risk"].get("max_exposure_usd", 100), "max_exposure_usd", 100)
-    atr_multiplier = _safe_decimal(current_strategy["risk"].get("atr_multiplier", 1.0), "atr_multiplier", 1.0)
+    risk_cfg = current_strategy.get("risk", {})
+    sizing = risk_cfg.get("sizing", "equity_pct")
+    if sizing == "atr":
+        # Temporarily treat ATR sizing as equity_pct with GUI-driven risk
+        sizing = "equity_pct"
+    max_exposure_usd = _safe_decimal(risk_cfg.get("max_exposure_usd", 100), "max_exposure_usd", 100)
 
     # Working copies used per-trade
     stop_loss_pct = stop_loss_pct_cfg
-    take_profit_pct = fixed_rr * stop_loss_pct  # strict R:R enforcement as baseline
+    take_profit_pct = fixed_rr * stop_loss_pct  # default; recomputed for equity_pct at entry
 
     capital = STARTING_CAPITAL
     position = Decimal("0")
@@ -322,7 +342,7 @@ def run_backtest(
         high = Decimal(str(row["high"]))
         low = Decimal(str(row["low"]))
 
-        # --- ROUTER UPDATE ---
+        # --- ROUTER UPDATE --- 
         if use_router:
             current_strategy = get_active_strategy(current_regime, strategy_mappings)
             entry_conditions = current_strategy["entry"]["conditions"]
@@ -339,19 +359,20 @@ def run_backtest(
             trailing_stop_pct = _safe_decimal(
                 current_strategy["exit"].get("trailing_stop", 0.0), "trailing_stop", 0.0
             )
-            sizing = current_strategy["risk"]["sizing"]
+
+            risk_cfg = current_strategy.get("risk", {})
+            sizing = risk_cfg.get("sizing", "equity_pct")
+            if sizing == "atr":
+                sizing = "equity_pct"
             max_exposure_usd = _safe_decimal(
-                current_strategy["risk"].get("max_exposure_usd", 100), "max_exposure_usd", 100
-            )
-            atr_multiplier = _safe_decimal(
-                current_strategy["risk"].get("atr_multiplier", 1.0), "atr_multiplier", 1.0
+                risk_cfg.get("max_exposure_usd", 100), "max_exposure_usd", 100
             )
 
-            # Enforce baseline R:R on *future* trades
+            # Enforce baseline R:R on *future* trades (exact stop % recomputed for equity_pct at entry)
             stop_loss_pct = stop_loss_pct_cfg
             take_profit_pct = fixed_rr * stop_loss_pct
 
-        # --- POSITION TRACKING ---
+        # --- POSITION TRACKING --- 
         is_long = position > 0
         if position != 0:
             if is_long:
@@ -361,7 +382,7 @@ def run_backtest(
                 high_water = min(high_water, high)
                 low_water = max(low_water, low)
 
-        # --- ENTRY ---
+        # --- ENTRY --- 
         if position == 0:
             entry_met = all(evaluate_condition(c, row, prev, adx_threshold) for c in entry_conditions)
 
@@ -381,37 +402,37 @@ def run_backtest(
                 # In "both", we treat signal as long by default (you can add explicit short logic later)
                 is_long = direction in ["long", "both"]
 
-                # --- POSITION SIZING WITH FULL SAFETY ---
-                if sizing == "atr":
-                    # 1–4% risk of equity depending on mode
+                # --- POSITION SIZING WITH GUI-DRIVEN RISK MODEL ---
+                if sizing == "equity_pct":
+                    # Notional position = position_frac * current equity
+                    notional = capital * position_frac
+                    if notional <= 0 or price <= 0:
+                        position_size = Decimal("0")
+                    else:
+                        position_size = notional / price
+
+                    # Desired equity risk
                     risk_amount = capital * risk_per_trade_frac
 
-                    atr_val = Decimal(str(row["atr"])) if not pd.isna(row["atr"]) else Decimal("0")
-                    stop_distance = atr_val * atr_multiplier
-
-                    # Force minimum stop distance (0.5% of price)
-                    min_stop = price * Decimal("0.005")
-                    if stop_distance <= 0:
-                        stop_distance = min_stop
+                    # Convert desired equity risk into a price stop distance (fraction),
+                    # accounting for fee ≈ FEE_PCT * notional applied at exit.
+                    if notional > 0:
+                        # risk_per_trade_frac / position_frac gives raw price move fraction.
+                        # We subtract FEE_PCT so (price move + fee) ≈ desired risk.
+                        raw_stop = (risk_per_trade_frac / position_frac) - FEE_PCT
+                        if raw_stop <= Decimal("0"):
+                            stop_loss_pct = stop_loss_pct_cfg  # fallback to JSON-defined stop
+                        else:
+                            stop_loss_pct = raw_stop
                     else:
-                        stop_distance = max(stop_distance, min_stop)
+                        stop_loss_pct = stop_loss_pct_cfg
 
-                    position_size = risk_amount / stop_distance
-                    # print(f"ATR ENTRY: price={price}, atr={atr_val}, stop_distance={stop_distance}, position_size={position_size}")
-
-                    # Derive stop % from ATR for this trade
-                    stop_loss_pct = stop_distance / price
-                    take_profit_pct = fixed_rr * stop_loss_pct  # strict 1.5R (or mode R) from JSON ATR
-
-                elif sizing == "equity_pct":
-                    # Risk a fixed fraction of equity in notional terms; stop is still percentage based
-                    notional = capital * risk_per_trade_frac
-                    position_size = notional / price
-                    stop_loss_pct = stop_loss_pct_cfg
                     take_profit_pct = fixed_rr * stop_loss_pct
+
                 else:
-                    # fixed_usd sizing
-                    position_size = max_exposure_usd / price
+                    # fixed_usd sizing branch
+                    notional = max_exposure_usd
+                    position_size = notional / price if price > 0 else Decimal("0")
                     stop_loss_pct = stop_loss_pct_cfg
                     take_profit_pct = fixed_rr * stop_loss_pct
 
@@ -444,9 +465,8 @@ def run_backtest(
                 )
 
                 equity.append(capital)
-                # print(f"ENTRY: {entry_ts} | {'LONG' if is_long else 'SHORT'} | size={position} | price={price}")
 
-        # --- EXIT LOGIC ---
+        # --- EXIT LOGIC --- 
         if position != 0:
             is_long = position > 0
 
@@ -651,9 +671,9 @@ def run_backtest(
         },
         regime_pnl=regime_pnl,
         equity_curve=equity,
-        trades=trades,  # already TradeLog objects
+        trades=trades,
     )
 
     return result.summary_str() + "\n", result
 
-# core/engine.py v1.5
+# core/engine.py v1.7 (679 lines)
