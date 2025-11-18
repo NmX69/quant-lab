@@ -1,21 +1,17 @@
 {
-  "name": "Trend MACD+ADX",
+  "name": "trend_macd",
   "regime": "trending",
   "direction": "long",
   "entry": {
     "conditions": [
-      { "type": "macd_cross", "direction": "up" },
-      { "type": "adx", "above": "mode_threshold" },
-      { "type": "price_above_ema", "period": 150 }
+      {"type": "macd_cross", "direction": "up"},
+      {"type": "adx", "above": 25}
     ]
   },
   "exit": {
-    "stop_loss": "mode_stop",
-    "take_profit": "mode_tp",
-    "partial_exit": 0.0,
-    "signal_exit": [
-      { "type": "macd_cross", "direction": "down" }
-    ]
+    "stop_loss": "6%",
+    "take_profit": "18%",
+    "trailing_stop": "5%"
   },
   "risk": {
     "sizing": "equity_pct",

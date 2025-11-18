@@ -1,21 +1,17 @@
 {
-  "name": "Trending EMA Crossover",
+  "name": "trending_ema_crossover",
   "regime": "trending",
-  "direction": "both",
+  "direction": "long",
   "entry": {
     "conditions": [
-      { "type": "ema_cross", "direction": "up", "fast": 50, "slow": 150 },
-      { "type": "adx", "above": "mode_threshold" },
-      { "type": "volume_zscore", "above": 1.0 }
+      {"type": "ema_cross", "fast": 50, "slow": 150, "direction": "up"},
+      {"type": "adx", "above": 25}
     ]
   },
   "exit": {
-    "stop_loss": "mode_stop",
-    "take_profit": "mode_tp",
-    "partial_exit": 0.5,
-    "signal_exit": [
-      { "type": "ema_cross", "direction": "down", "fast": 50, "slow": 150 }
-    ]
+    "stop_loss": "6%",
+    "take_profit": "18%",
+    "trailing_stop": "5%"
   },
   "risk": {
     "sizing": "equity_pct",

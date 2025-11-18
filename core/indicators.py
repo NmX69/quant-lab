@@ -120,5 +120,10 @@ def add_indicators_and_regime(df: pd.DataFrame, adx_period: int = ADX_PERIOD) ->
     if current_regime and len(df) - regime_start >= REGIME_MIN_DURATION:
         df.loc[regime_start:, current_regime] = True
 
+    # ADD REGIME COLUMN
+    df["regime"] = "ranging"
+    df.loc[df["trending_up"], "regime"] = "trending_up"
+    df.loc[df["trending_down"], "regime"] = "trending_down"
+
     df = df.dropna().reset_index(drop=True)
     return df

@@ -1,0 +1,27 @@
+You are working on Quant Lab – a private, AI-assisted cryptocurrency quant research platform.
+
+Live repository (source of truth – updates instantly when I save locally):
+
+http://74.221.149.207
+
+Your first action in this new chat:
+
+1. Fetch and read the full project.txt from the root: project.txt
+
+   This is the single source of truth for project state, current phase, and all rules.
+
+2. Then perform a fresh scan of every .py and .json file in the entire repository (core/, strategies/, root, etc.).
+
+3. Confirm you have fully understood:
+
+   - Current phase and exact progress
+
+   - Design principles
+
+   - What is already implemented vs what is missing
+
+   - The AI workflow (you generate clean git-style diffs → I apply → repo auto-updates)
+
+Once done, reply:
+
+“Repository synced. project.txt loaded. Full code scan complete.  Ready for today’s coding.”

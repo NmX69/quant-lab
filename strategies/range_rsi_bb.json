@@ -1,21 +1,19 @@
 {
-  "name": "Range RSI BB",
+  "name": "range_rsi_bb",
   "regime": "ranging",
   "direction": "both",
   "entry": {
     "conditions": [
-      { "type": "rsi", "below": 30 },
-      { "type": "price_below_bb" },
-      { "type": "volume_zscore", "above": 0.5 }
+      {"type": "price_near_bb_lower"},
+      {"type": "rsi", "below": 30}
     ]
   },
   "exit": {
+    "stop_loss": "3%",
+    "take_profit": "9%",
     "signal_exit": [
-      { "type": "price_crosses_mid_bb" }
-    ],
-    "stop_loss": "mode_stop",
-    "take_profit": "mode_tp",
-    "partial_exit": 0.0
+      {"type": "price_crosses_mid_bb"}
+    ]
   },
   "risk": {
     "sizing": "equity_pct",
