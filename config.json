@@ -1,7 +1,7 @@
 {
-  "data_file": "BTCUSDT_1h.csv (8100 candles)",
+  "data_file": "ADAUSDT_1h.csv (ADAUSDT 1h, 7877 candles)",
   "timeframe": "1h",
-  "strategy": "range_mean_reversion",
+  "strategy": "range_rsi_bb",
   "mode": "balanced",
   "candles": 0,
   "show_equity": false,

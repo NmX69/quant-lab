@@ -16,6 +16,38 @@ config.json
   - Purpose: User configuration for Quant-Lab (GUI selections, slider values, etc.).
   - Notes: Read/written via core/config_manager.load_config/save_config.
 
+getdata.py
+  - Purpose: Multi-year OHLCV downloader and manifest generator.
+  - Major APIs:
+      - main() – CLI entrypoint to download data and build/refresh data/manifest.json.
+  - Notes:
+      - Writes CSVs under data/.
+      - Regenerates or updates manifest.json describing available symbols/timeframes.
+
+verify_regime.py
+  - Purpose: CLI tool to verify regime detection on price data.
+  - Major APIs:
+      - main() – loads a sample CSV, applies core.indicators.add_indicators_and_regime,
+        and prints/inspects regime flags for sanity checks.
+  - Notes:
+      - Used as a diagnostics tool during indicator/regime development.
+
+README.md
+  - Purpose: Human-facing project overview and quickstart instructions.
+  - Notes:
+      - High-level description; not authoritative for engine details (project.txt is).
+
+project.txt
+  - Purpose: Quant Lab Master Specification and canonical architecture/phase document.
+  - Notes:
+      - Must be read by any AI before writing or refactoring code.
+      - Section 0 defines AI usage, headers/footers, and phase constraints.
+
+project_tree.txt
+  - Purpose: This file – high-level structural map of modules and responsibilities.
+  - Notes:
+      - Keep in sync with project.txt whenever modules are added/removed/repurposed.
+
 data/
   - Purpose: Storage for price data CSV files and the manifest.
   - Important contents:
@@ -236,7 +268,9 @@ gui/backtester_gui.py
             - toggle_equity_area() – shows/hides equity plot canvas.
             - run_backtest() – dispatches to:
                 - _run_single(...)
+
                 - _run_all_strategies(...)
+
                 - _run_all_assets(...)
         * Uses:
             - core.backtest_runner.* backtest functions.
@@ -292,3 +326,5 @@ How to use this file with AI
     - new modes (scanner, live trading, etc.),
     - new strategy/risk modules,
     - new GUI screens.
+
+# /project_tree.txt v1.1 (330 lines)
