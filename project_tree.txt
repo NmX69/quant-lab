@@ -14,82 +14,64 @@ quant_lab.py
 
 config.json
   - Purpose: User configuration for Quant-Lab (GUI selections, slider values, etc.).
-  - Notes: Read/written via core/config_manager.load_config/save_config.
-
-getdata.py
-  - Purpose: Multi-year OHLCV downloader and manifest generator.
-  - Major APIs:
-      - main() – CLI entrypoint to download data and build/refresh data/manifest.json.
   - Notes:
-      - Writes CSVs under data/.
-      - Regenerates or updates manifest.json describing available symbols/timeframes.
+      - Written/read by core.config_manager.
+      - Stores last-used file/strategy/mode/slider positions and router mappings.
 
-verify_regime.py
-  - Purpose: CLI tool to verify regime detection on price data.
-  - Major APIs:
-      - main() – loads a sample CSV, applies core.indicators.add_indicators_and_regime,
-        and prints/inspects regime flags for sanity checks.
-  - Notes:
-      - Used as a diagnostics tool during indicator/regime development.
 
-README.md
-  - Purpose: Human-facing project overview and quickstart instructions.
-  - Notes:
-      - High-level description; not authoritative for engine details (project.txt is).
-
-project.txt
-  - Purpose: Quant Lab Master Specification and canonical architecture/phase document.
-  - Notes:
-      - Must be read by any AI before writing or refactoring code.
-      - Section 0 defines AI usage, headers/footers, and phase constraints.
-
-project_tree.txt
-  - Purpose: This file – high-level structural map of modules and responsibilities.
-  - Notes:
-      - Keep in sync with project.txt whenever modules are added/removed/repurposed.
+================================================================================
+data/  (CSV market data and manifest)
+================================================================================
 
 data/
-  - Purpose: Storage for price data CSV files and the manifest.
+  - Purpose: All CSV price series and the manifest describing them.
   - Important contents:
-      - manifest.json – describes available trading pairs, timeframes, and file paths.
+      - manifest.json – describes available trading pairs, timeframes, candle counts.
+      - *.csv – per-asset OHLCV files (e.g., BTCUSDT_1h.csv).
 
-results/
-  - Purpose: Output directory for trade logs and backtest artifacts.
-  - Typical contents:
-      - trades_<ASSET>_<STRATEGY>_<MODE>.csv – saved via BacktestResult.save_trades().
-
-strategies/  (directory name inferred; adjust if different)
-  - Purpose: JSON strategy definitions loaded by core.strategy_loader.
-  - Contents: One JSON per strategy, defining entry/exit conditions, risk settings, etc.
+  - Notes:
+      - Quant-Lab expects manifest.json to be in this folder.
+      - CSVs are referenced by filename from manifest.json.
 
 
 ================================================================================
-core/  (engine + orchestration + config)
+strategies/  (JSON strategy definitions)
 ================================================================================
 
-core/config_manager.py
-  - Purpose: Centralized configuration and path handling.
-  - Major APIs:
-      - PROJECT_ROOT – absolute path to project root.
-      - CONFIG_FILE – path to config.json.
-      - DATA_DIR – path to data/ directory.
-      - MANIFEST_FILE – path to data/manifest.json.
-      - RESULTS_DIR – path to results/ directory.
-      - load_config() -> dict – merge defaults with config.json on disk.
-      - save_config(cfg: dict) -> None – persist config back to config.json.
+strategies/
+  - Purpose: Strategy definitions in declarative JSON form.
+  - Example files:
+      - range_mean_reversion.json
+      - range_rsi_bb.json
+      - ranging_stochastic.json
+      - trending_ema_crossover.json
+      - trend_macd.json
+  - Notes:
+      - Each JSON specifies:
+          - name, regime, direction
+          - entry.conditions list (indicator conditions)
+          - exit.stop_loss / exit.take_profit / signal_exit list
+          - risk section (sizing mode, risk_per_trade_pct)
+      - Loaded by core.strategy_loader and used by engine/backtest_runner.
+
+
+================================================================================
+core/  (engine, risk, indicators, routing, reporting, optimization)
+================================================================================
 
 core/engine.py
-  - Purpose: Orchestrate a single regime-aware backtest over a DataFrame.
+  - Purpose: Core backtest engine. Iterates candles, applies strategies, tracks equity.
   - Major APIs:
       - run_backtest(
             df: pd.DataFrame,
+            asset: str,
+            strategy: Dict,
             mode: str,
-            strategy_name: str,
-            use_router: bool = False,
-            strategy_mappings: Optional[Dict] = None,
-            position_pct: float = 15.0,
-            risk_pct: float = 1.0,
-            reward_rr: Optional[float] = None,
+            use_router: bool,
+            router_mappings: Optional[Dict[str, str]],
+            position_pct: float,
+            risk_pct: float,
+            reward_rr: float,
         ) -> Tuple[str, BacktestResult]
         * Main public entrypoint for running a backtest.
   - Internals (delegated to other modules):
@@ -115,57 +97,51 @@ core/conditions.py
   - Purpose: Indicator-based entry/exit condition evaluation.
   - Major APIs:
       - invert_condition(cond: Dict) -> Dict
-        * Returns a logical “inverse” of a condition, used to derive short signals.
-      - evaluate_condition(
-            cond: Dict,
-            row: pd.Series,
-            prev: pd.Series,
-            adx_threshold: float,
-        ) -> bool
-        * Evaluates conditions against the current and previous row.
-  - Supported condition types (as inferred):
-      - macd_cross, ema_cross, stochastic_cross, adx, rsi,
-        price_above_ema, price_below_ema,
-        price_above_bb, price_below_bb,
-        price_near_bb_lower, price_near_bb_upper,
-        price_crosses_mid_bb, price_crosses_mid_bb_down.
+        * Invert a condition (e.g., > becomes <=, cross_over becomes cross_under).
+      - evaluate_condition(row: pd.Series, condition: Dict) -> bool
+        * Evaluate a single condition against the current candle/indicator row.
+      - evaluate_conditions(row: pd.Series, conditions: List[Dict]) -> bool
+        * Evaluate AND of multiple conditions.
+  - Notes:
+      - Supports condition types such as RSI thresholds, MACD crossovers, BB tests, etc.
 
 core/exits.py
-  - Purpose: Trade exit logic and trade record construction.
+  - Purpose: Exit-signal helpers for stop-loss, take-profit, and signal-based exits.
   - Major APIs:
-      - Internal helpers to:
-        * Handle take-profit exits.
-        * Handle stop-loss and trailing-stop exits.
-        * Handle signal-based exits from strategy exit signals.
-        * Close any remaining position at end-of-simulation.
-      - A trade builder (e.g. _build_trade(...)) that constructs TradeLog objects:
-        * Computes MAE/MFE, pnl_pct, pnl_R, hold_time_hours, trade_type, etc.
+      - check_stop_loss(...)
+      - check_take_profit(...)
+      - check_signal_exit(...)
+        * Evaluate whether a given exit condition is hit on this candle.
   - Notes:
-      - Ensures consistent trade metadata across all exit paths.
+      - Works closely with core.state and core.engine to finalize trades.
 
 core/state.py
-  - Purpose: Encapsulate and manage backtest state during a run.
-  - Major responsibilities:
-      - Track:
-        * capital, position, entry_price, entry_ts, entry_regime
-        * high_water, low_water, stop_price, trailing_active
-        * regime_pnl, regime_changes, per-regime counts
-        * equity_curve list
-      - Provide helpers or a BacktestState-like structure to:
-        * Initialize state.
-        * Update state each bar.
-        * Summarize key metrics at the end.
+  - Purpose: Encapsulate backtest state (equity, open position, trade logs, regime stats).
+  - Major APIs:
+      - BacktestState – object that tracks:
+          * current_equity, position_size, open_trade, trade_logs, equity_curve, regime_counts.
+      - Methods to:
+          * open_trade(...)
+          * update_equity(...)
+          * close_trade(...)
+  - Notes:
+      - Intended to keep engine.run_backtest relatively stateless and clean.
 
 core/results_builder.py
-  - Purpose: Compute performance statistics and build BacktestResult objects.
-  - Major responsibilities:
-      - Given equity_curve and trades:
-        * Compute wins, winrate.
-        * Compute equity returns series, Sharpe ratio (using np.diff).
-        * Compute max drawdown (absolute and %).
-      - Build and return:
-        * BacktestResult instance (final_equity, return %, sharpe, max_dd, etc.).
-        * Summary string (multi-line text used in GUI output).
+  - Purpose: Convert raw BacktestState/TradeLog data into BacktestResult and summary text.
+  - Major APIs:
+      - build_backtest_result(
+            state: BacktestState,
+            asset: str,
+            mode: str,
+            strategy_name: str,
+            use_router: bool,
+            router_mappings: Optional[Dict[str, str]],
+        ) -> BacktestResult
+      - build_summary_text(result: BacktestResult) -> str
+        * Builds the human-readable multi-line summary printed in CLI/GUI.
+  - Notes:
+      - Responsible for computing basic metrics like total_return_pct, max_dd, winrate, etc.
 
 core/indicators.py
   - Purpose: Compute technical indicators and regime flags for raw OHLCV data.
@@ -206,6 +182,43 @@ core/results.py
         * methods:
           - summary_str() -> str – formatted console-style summary.
           - save_trades(results_dir: str) -> None – save trades CSV under results/.
+
+core/reporting.py
+  - Purpose: Compute advanced analytics (expectancy, volatility, streaks, Sortino, MAR, regime stats) and export reports.
+  - Major APIs:
+      - build_report(result: BacktestResult) -> Dict[str, Any]
+        * Consumes a BacktestResult + its TradeLog list and returns a nested analytics dict
+          with sections: meta, risk, streaks, drawdown, regimes.
+      - export_report_json(report: Dict[str, Any], path: str) -> None
+        * Save analytics report to JSON on disk.
+      - export_report_csv(report: Dict[str, Any], path: str) -> None
+        * Save flattened analytics rows to CSV.
+
+core/optimizer.py
+  - Purpose: Grid-search optimizers for risk envelope and strategy JSON parameters.
+  - Major APIs:
+      - grid_search_single_asset(asset_file: str, strategy_name: str, mode: str,
+                                 use_router: bool, param_grid: Dict[str, List[float]],
+                                 max_candles: int,
+                                 strategy_mappings: Optional[Dict[str, str]])
+        * Sweeps position_pct / risk_pct / reward_rr for one asset/strategy/mode.
+      - grid_search_all_assets(timeframe: str, strategy_name: str, mode: str,
+                               use_router: bool, param_grid: Dict[str, List[float]],
+                               max_candles: int,
+                               strategy_mappings: Optional[Dict[str, str]])
+        * Sweeps the same envelope across all assets in manifest.json and returns per-asset best rows.
+      - grid_search_strategy_params_single_asset(asset_file: str, strategy_name: str,
+                                                 mode: str, strategy_param_grid: Dict[str, List[Any]],
+                                                 position_pct: float, risk_pct: float, reward_rr: float,
+                                                 max_candles: int)
+        * Grid-search over strategy JSON paths (e.g. entry.conditions[1].below,
+          exit.stop_loss, exit.take_profit) with a fixed engine envelope.
+      - select_good_region(df: pd.DataFrame, min_sharpe: Optional[float],
+                           max_dd_pct: Optional[float], min_trades: Optional[int],
+                           min_return_pct: Optional[float]) -> pd.DataFrame
+        * Filter optimization results down to a "good" region in risk space.
+      - summarize_region(df: pd.DataFrame, top_n: int) -> pd.DataFrame
+        * Sort + truncate to the most interesting slices for display.
 
 core/backtest_runner.py
   - Purpose: Orchestrate backtests at the “app” level, without any GUI code.
@@ -261,44 +274,34 @@ gui/backtester_gui.py
       - class BacktesterGUI(tk.Tk-like):
         * Manages all Tk variables (strategy, file, mode, run_mode, sliders, switches).
         * Loads config via core.config_manager.load_config().
-        * Handles:
+        * Handles core GUI flows:
             - scan_data_files() – populates data file dropdown from manifest.json.
             - load_strategies() – populates strategy dropdowns from strategy_loader.
             - toggle_router_ui() – enables/disables router-related controls.
             - toggle_equity_area() – shows/hides equity plot canvas.
             - run_backtest() – dispatches to:
                 - _run_single(...)
-
                 - _run_all_strategies(...)
-
                 - _run_all_assets(...)
+        * Optimizer GUI (Phase C):
+            - create_menu() – adds Data / Reports / Optimize menus.
+            - open_single_optimizer_window()
+              * Grid-search risk envelope for the selected asset/strategy.
+            - open_all_assets_optimizer_window()
+              * Grid-search risk envelope across all assets in a timeframe.
+            - open_strategy_param_optimizer_window()
+              * Grid-search strategy JSON parameters (e.g. RSI threshold, SL/TP) for one asset.
         * Uses:
             - core.backtest_runner.* backtest functions.
+            - core.optimizer.* for grid-search logic and region filters.
+            - core.reporting.build_report for advanced analytics in Reports menu.
             - gui.results_display.* for plotting and summary formatting.
             - gui.styles.setup_styles() for consistent look-and-feel.
             - gui.layout.create_left_panel/create_right_panel for widget construction.
       - copy_output() – copies current summary text to clipboard.
 
-gui/results_display.py
-  - Purpose: GUI-agnostic helpers for plotting equity and formatting summary tables.
-  - Major APIs:
-      - plot_equity_curve(fig: Figure, trades: List[TradeLog]) -> None
-        * Draws equity curve based on TradeLog pnl; used by GUI.
-      - format_all_strategies_summary(df_res: pd.DataFrame) -> str
-        * Returns printable multi-line summary of strategy comparison.
-      - format_all_assets_summary(df_res: pd.DataFrame) -> str
-        * Returns printable multi-line summary of asset comparison.
-
-gui/styles.py
-  - Purpose: Centralize ttk style configuration.
-  - Major APIs:
-      - setup_styles() -> None
-        * Configures base fonts, colors, button/combobox styles, etc.
-  - Notes:
-      - Called once in BacktesterGUI.__init__.
-
 gui/layout.py
-  - Purpose: Build the left and right GUI panels and attach Tk variables/widgets.
+  - Purpose: Build the left (controls) and right (output) panels for BacktesterGUI.
   - Major APIs:
       - create_left_panel(gui: BacktesterGUI) -> None
         * Creates:
@@ -316,6 +319,22 @@ gui/layout.py
             - COPY OUTPUT button
             - Matplotlib Figure + canvas for equity curve plot.
 
+gui/results_display.py
+  - Purpose: GUI-agnostic helpers for plotting equity and formatting summary tables.
+  - Major APIs:
+      - plot_equity_curve(fig: Figure, trades: List[TradeLog]) -> None
+        * Draws equity curve based on TradeLog pnl; used by GUI.
+      - format_all_strategies_summary(df_res: pd.DataFrame) -> str
+        * Returns printable multi-line summary of strategy comparison.
+      - format_all_assets_summary(df_res: pd.DataFrame) -> str
+        * Returns printable multi-line summary of asset comparison.
+
+gui/styles.py
+  - Purpose: Centralize ttk style configuration.
+  - Major APIs:
+      - setup_styles() -> None
+        * Applies dark theme / fonts / paddings to ttk widgets.
+
 
 ================================================================================
 How to use this file with AI
@@ -327,4 +346,4 @@ How to use this file with AI
     - new strategy/risk modules,
     - new GUI screens.
 
-# /project_tree.txt v1.1 (330 lines)
+# /project_tree.txt v1.3 (349 lines)

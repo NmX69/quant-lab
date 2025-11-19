@@ -1,0 +1,92 @@
+Running backtest for XRPUSDT_1h.csv | Max candles: ALL
+Available: 7788 candles
+Using 7788 of 7788 available candles.
+
+
+============================================================
+REGIME-AWARE BACKTEST SUMMARY
+============================================================
+============================================================
+BACKTEST (router) – XRPUSDT_1h
+============================================================
+Final: $105.20
+Return: +5.20%
+Trades: 146
+Winrate: 51.4%
+Sharpe: 2.87
+Time Under Water: 273.0h
+Max DD: $13.44 (11.85%)
+Total Regime Changes: 242
+Regimes:
+  trending_up: 1501 candles | PNL: $+4.1958 (+4.20%)
+  trending_down: 1847 candles | PNL: $+0.5118 (+0.51%)
+  ranging: 4390 candles | PNL: $+0.4931 (+0.49%)
+============================================================
+
+=== ADVANCED ANALYTICS ===
+Expectancy (R):          0.039
+Avg Win R / Avg Loss R:  0.686 / -0.643
+Mean Return / Vol (%):   0.258 /  5.955
+Sortino:                 0.050
+MAR:                     0.444
+Longest Win Streak:     5
+Longest Loss Streak:    5
+
+Backtest completed.
+
+
+next test I ran was no-router, but header still says "router"... 
+Running backtest for XRPUSDT_1h.csv | Max candles: ALL
+Available: 7788 candles
+Using 7788 of 7788 available candles.
+
+
+============================================================
+REGIME-AWARE BACKTEST SUMMARY
+============================================================
+============================================================
+BACKTEST (router) – XRPUSDT_1h
+============================================================
+Final: $121.16
+Return: +21.16%
+Trades: 262
+Winrate: 50.0%
+Sharpe: 6.49
+Time Under Water: 477.0h
+Max DD: $29.51 (22.78%)
+Total Regime Changes: 242
+Regimes:
+  trending_up: 1501 candles | PNL: $+18.0388 (+18.04%)
+  trending_down: 1847 candles | PNL: $-0.6188 (-0.62%)
+  ranging: 4390 candles | PNL: $+3.7437 (+3.74%)
+============================================================
+
+=== ADVANCED ANALYTICS ===
+Expectancy (R):          0.077
+Avg Win R / Avg Loss R:  0.597 / -0.442
+Mean Return / Vol (%):   0.509 /  5.188
+Sortino:                 0.122
+MAR:                     0.941
+Longest Win Streak:     10
+Longest Loss Streak:    6
+
+Backtest completed.
+
+
+all strategies (single):
+All Strategies Summary:
+              Strategy      Final  Return %  Trades  Max DD %
+  range_mean_reversion  91.203161 -8.796839     657 14.603619
+          range_rsi_bb 121.163645 21.163645     262 22.784152
+    ranging_stochastic 107.956704  7.956704     120 11.460008
+            trend_macd 102.117909  2.117909      96  9.346545
+trending_ema_crossover 101.093264  1.093264      16  3.008373
+
+
+all assets (single):
+All Assets Summary:
+  Asset  Candles      Final  Return %  Trades  Max DD %
+ADAUSDT     7877 104.860796  4.860796     260 12.071885
+BTCUSDT     8100  96.023279 -3.976721     250  6.580758
+XRPUSDT     7788 121.163645 21.163645     262 22.784152
+

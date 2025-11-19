@@ -7,7 +7,7 @@ import json
 import os
 import sys
 import traceback
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 import tkinter as tk
 from tkinter import ttk, messagebox
@@ -25,6 +25,13 @@ from core.backtest_runner import (
 )
 from core.strategy_loader import load_strategies, list_strategies
 from core.reporting import build_report
+from core.optimizer import (
+    grid_search_single_asset,
+    grid_search_all_assets,
+    grid_search_strategy_params_single_asset,
+    select_good_region,
+    summarize_region,
+)
 from gui.styles import setup_styles
 from gui.layout import create_left_panel, create_right_panel
 from gui.results_display import (
@@ -116,9 +123,26 @@ class BacktesterGUI:
             command=self.open_results_folder,
         )
 
+        # Optimize menu (Phase C)
+        optimizer_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Optimize", menu=optimizer_menu)
+        optimizer_menu.add_command(
+            label="Optimize Current Asset",
+            command=self.open_single_optimizer_window,
+        )
+        optimizer_menu.add_command(
+            label="Optimize All Assets (timeframe)",
+            command=self.open_all_assets_optimizer_window,
+        )
+        optimizer_menu.add_command(
+            label="Optimize Strategy Params (single asset)",
+            command=self.open_strategy_param_optimizer_window,
+        )
+
         self.menubar = menubar
         self.data_menu = data_menu
         self.reports_menu = reports_menu
+        self.optimizer_menu = optimizer_menu
 
     # ------------------------------------------------------------------ #
     # REPORTS
@@ -173,8 +197,8 @@ class BacktesterGUI:
         lines.append("\nREGIMES")
         for name, stats in regimes.items():
             lines.append(f"  {name}:")
-            for k, v in stats.items():
-                lines.append(f"    {k}: {v}")
+            for key, val in stats.items():
+                lines.append(f"    {key}: {val}")
 
         text.insert("1.0", "\n".join(lines))
         text.configure(state="disabled")
@@ -289,6 +313,886 @@ class BacktesterGUI:
                 self.ranging_var.set(self.config["ranging_strategy"])
             else:
                 self.ranging_var.set(names[0])
+
+    # ------------------------------------------------------------------ #
+    # OPTIMIZER HELPERS
+    # ------------------------------------------------------------------ #
+    def _parse_float_list(self, text: str, fallback: float) -> List[float]:
+        """
+        Parse a comma-separated list of floats. If parsing fails or result is empty,
+        return [fallback].
+        """
+        if not text:
+            return [fallback]
+        parts = [p.strip() for p in text.split(",") if p.strip()]
+        vals: List[float] = []
+        for p in parts:
+            try:
+                vals.append(float(p))
+            except Exception:
+                continue
+        return vals or [fallback]
+
+    def _parse_strategy_values(self, text: str) -> List[Any]:
+        """
+        Parse a comma-separated list of strategy parameter values.
+
+        - Values containing '%' are kept as strings (e.g. "3%").
+        - Others are parsed as float, then downcast to int if integral.
+        - If parsing fails, keep as string.
+        """
+        if not text:
+            return []
+        vals: List[Any] = []
+        for raw in text.split(","):
+            v = raw.strip()
+            if not v:
+                continue
+            if "%" in v:
+                vals.append(v)
+                continue
+            try:
+                f = float(v)
+                if f.is_integer():
+                    vals.append(int(f))
+                else:
+                    vals.append(f)
+            except Exception:
+                vals.append(v)
+        return vals
+
+    def _build_router_mappings(self) -> Dict[str, str]:
+        """
+        Build regime router mappings from the main GUI combo selections.
+        """
+        return {
+            "trending_up": self.trending_up_var.get(),
+            "trending_down": self.trending_down_var.get(),
+            "ranging": self.ranging_var.get(),
+        }
+
+    def _get_available_timeframes(self) -> List[str]:
+        """
+        Return a sorted list of available timeframes from manifest.json.
+        Fallback to ['1h'] if manifest can't be read or is missing.
+        """
+        if not os.path.exists(MANIFEST_FILE):
+            return ["1h"]
+        try:
+            with open(MANIFEST_FILE, "r") as f:
+                manifest = json.load(f)
+        except Exception:
+            return ["1h"]
+
+        pairs = manifest.get("pairs", {})
+        tfs = set()
+        for _, tf_data in pairs.items():
+            for tf in tf_data.keys():
+                tfs.add(tf)
+        return sorted(tfs) or ["1h"]
+
+    @staticmethod
+    def _parse_optional_float(text: str) -> Optional[float]:
+        text = text.strip()
+        if not text:
+            return None
+        try:
+            return float(text)
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_optional_int(text: str) -> Optional[int]:
+        text = text.strip()
+        if not text:
+            return None
+        try:
+            return int(text)
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------ #
+    # OPTIMIZER WINDOWS – C1 (single asset) + C2 (all assets)
+    # ------------------------------------------------------------------ #
+    def open_single_optimizer_window(self) -> None:
+        """
+        Configure and run parameter optimization for a user-selected
+        asset + strategy (engine envelope), with optional C4 filter.
+        """
+        # Default selections from main GUI
+        default_asset_label = self.file_var.get()
+        default_strategy = self.strategy_var.get()
+        default_mode = self.mode_var.get()
+        default_use_router = self.use_router_var.get()
+
+        win = tk.Toplevel(self.root)
+        win.title("Optimize Current Asset")
+        win.configure(bg="#0d1117")
+
+        # Top-row selectors: asset, strategy, mode, router toggle
+        ttk.Label(win, text="Asset:").grid(row=0, column=0, sticky="w", padx=10, pady=(10, 2))
+        asset_var = tk.StringVar(value=default_asset_label)
+        asset_values = list(self.file_combo["values"])
+        asset_combo = ttk.Combobox(win, textvariable=asset_var, values=asset_values, state="readonly", width=60)
+        asset_combo.grid(row=0, column=1, sticky="ew", padx=10, pady=(10, 2))
+
+        ttk.Label(win, text="Strategy:").grid(row=1, column=0, sticky="w", padx=10, pady=2)
+        strat_var = tk.StringVar(value=default_strategy)
+        strat_values = list(self.strategy_combo["values"])
+        strat_combo = ttk.Combobox(win, textvariable=strat_var, values=strat_values, state="readonly", width=40)
+        strat_combo.grid(row=1, column=1, sticky="ew", padx=10, pady=2)
+
+        ttk.Label(win, text="Mode:").grid(row=2, column=0, sticky="w", padx=10, pady=2)
+        mode_var = tk.StringVar(value=default_mode)
+        mode_combo = ttk.Combobox(
+            win,
+            textvariable=mode_var,
+            values=["conservative", "balanced", "aggressive"],
+            state="readonly",
+            width=20,
+        )
+        mode_combo.grid(row=2, column=1, sticky="w", padx=10, pady=2)
+
+        use_router_var = tk.BooleanVar(value=default_use_router)
+        ttk.Checkbutton(
+            win,
+            text="Use Regime Router (use current router mappings)",
+            variable=use_router_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(2, 10))
+
+        # Param entries
+        ttk.Label(win, text="position_pct values (comma-separated):").grid(
+            row=4, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        pos_default = f"{float(self.position_pct_var.get()):.1f}"
+        pos_entry = ttk.Entry(win, width=40)
+        pos_entry.insert(0, pos_default)
+        pos_entry.grid(row=4, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="risk_pct values (comma-separated):").grid(
+            row=5, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        risk_default = f"{float(self.risk_pct_var.get()):.1f}"
+        risk_entry = ttk.Entry(win, width=40)
+        risk_entry.insert(0, risk_default)
+        risk_entry.grid(row=5, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="reward_rr values (comma-separated):").grid(
+            row=6, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        rr_default = f"{float(self.rr_var.get()):.2f}"
+        rr_entry = ttk.Entry(win, width=40)
+        rr_entry.insert(0, rr_default)
+        rr_entry.grid(row=6, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="Max candles (0 = all):").grid(
+            row=7, column=0, sticky="w", padx=10, pady=(5, 10)
+        )
+        max_c_default = str(self.candles_var.get())
+        max_c_entry = ttk.Entry(win, width=20)
+        max_c_entry.insert(0, max_c_default)
+        max_c_entry.grid(row=7, column=1, sticky="w", padx=10, pady=(5, 10))
+
+        # Region filter (C4)
+        filter_frame = ttk.LabelFrame(win, text="Region Filter (optional)", padding=8)
+        filter_frame.grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 5))
+
+        min_sharpe_var = tk.StringVar()
+        max_dd_var = tk.StringVar()
+        min_trades_var = tk.StringVar()
+        min_return_var = tk.StringVar()
+        top_n_var = tk.StringVar(value="50")
+        apply_filter_var = tk.BooleanVar(value=True)
+
+        ttk.Label(filter_frame, text="Min Sharpe:").grid(row=0, column=0, sticky="w")
+        min_sharpe_entry = ttk.Entry(filter_frame, width=8, textvariable=min_sharpe_var)
+        min_sharpe_entry.grid(row=0, column=1, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Max DD (%):").grid(row=0, column=2, sticky="w")
+        max_dd_entry = ttk.Entry(filter_frame, width=8, textvariable=max_dd_var)
+        max_dd_entry.grid(row=0, column=3, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Min Trades:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        min_trades_entry = ttk.Entry(filter_frame, width=8, textvariable=min_trades_var)
+        min_trades_entry.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Min Return (%):").grid(row=1, column=2, sticky="w", pady=(4, 0))
+        min_return_entry = ttk.Entry(filter_frame, width=8, textvariable=min_return_var)
+        min_return_entry.grid(row=1, column=3, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Top N:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        top_n_entry = ttk.Entry(filter_frame, width=6, textvariable=top_n_var)
+        top_n_entry.grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Checkbutton(
+            filter_frame,
+            text="Apply filter & show Top N",
+            variable=apply_filter_var,
+        ).grid(row=2, column=2, columnspan=2, sticky="w", pady=(4, 0))
+
+        # Status + Results
+        status_label = ttk.Label(win, text="", foreground="#58a6ff")
+        status_label.grid(row=9, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
+
+        results_text = tk.Text(
+            win,
+            wrap="word",
+            height=20,
+            width=100,
+            bg="#0d1117",
+            fg="#c9d1d9",
+        )
+        results_text.grid(row=11, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="nsew")
+        win.grid_rowconfigure(11, weight=1)
+        win.grid_columnconfigure(1, weight=1)
+
+        def run_optimize_single() -> None:
+            try:
+                sel_label = asset_var.get()
+                if not sel_label:
+                    messagebox.showerror("Optimizer", "No asset selected.")
+                    return
+                asset_file = sel_label.split(" (")[0]
+
+                strat = strat_var.get()
+                if not strat:
+                    messagebox.showerror("Optimizer", "No strategy selected.")
+                    return
+
+                mode = mode_var.get()
+                use_router = bool(use_router_var.get())
+
+                pos_vals = self._parse_float_list(pos_entry.get(), float(self.position_pct_var.get()))
+                risk_vals = self._parse_float_list(risk_entry.get(), float(self.risk_pct_var.get()))
+                rr_vals = self._parse_float_list(rr_entry.get(), float(self.rr_var.get()))
+                try:
+                    max_c = int(max_c_entry.get())
+                except Exception:
+                    max_c = 0
+
+                param_grid = {
+                    "position_pct": pos_vals,
+                    "risk_pct": risk_vals,
+                    "reward_rr": rr_vals,
+                }
+
+                mappings = self._build_router_mappings() if use_router else None
+
+                status_label.config(text="Running optimization...")
+                win.config(cursor="watch")
+                win.update_idletasks()
+
+                df_res = grid_search_single_asset(
+                    asset_file=asset_file,
+                    strategy_name=strat,
+                    mode=mode,
+                    use_router=use_router,
+                    param_grid=param_grid,
+                    max_candles=max_c,
+                    strategy_mappings=mappings,
+                )
+
+                results_text.delete("1.0", tk.END)
+
+                if df_res.empty:
+                    results_text.insert("1.0", "No valid optimization results.\n")
+                    status_label.config(text="Optimization completed (0 valid combos).")
+                else:
+                    total = len(df_res)
+
+                    df_show = df_res
+                    filtered_count = total
+
+                    if apply_filter_var.get():
+                        min_sh = self._parse_optional_float(min_sharpe_var.get())
+                        max_dd = self._parse_optional_float(max_dd_var.get())
+                        min_tr = self._parse_optional_int(min_trades_var.get())
+                        min_ret = self._parse_optional_float(min_return_var.get())
+
+                        good = select_good_region(
+                            df_res,
+                            min_sharpe=min_sh,
+                            max_dd_pct=max_dd,
+                            min_trades=min_tr,
+                            min_return_pct=min_ret,
+                        )
+                        filtered_count = len(good)
+
+                        if filtered_count > 0:
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(good, top_n=top_n)
+                        else:
+                            # If filter nukes everything, fall back to full table but report that.
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(df_res, top_n=top_n)
+
+                        status_label.config(
+                            text=f"Optimization completed. Combos: {total}, passed filter: {filtered_count}."
+                        )
+                    else:
+                        try:
+                            top_n = int(top_n_var.get())
+                        except Exception:
+                            top_n = 50
+                        df_show = summarize_region(df_res, top_n=top_n)
+                        status_label.config(
+                            text=f"Optimization completed. Combos: {total}."
+                        )
+
+                    results_text.insert("1.0", df_show.to_string(index=False) + "\n")
+
+            except Exception:
+                results_text.delete("1.0", tk.END)
+                results_text.insert("1.0", "Optimization failed:\n\n" + traceback.format_exc())
+                status_label.config(text="Optimization failed.")
+            finally:
+                win.config(cursor="")
+                win.update_idletasks()
+
+        ttk.Button(win, text="Run Optimization", command=run_optimize_single).grid(
+            row=10, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew"
+        )
+
+    def open_all_assets_optimizer_window(self) -> None:
+        """
+        Configure and run parameter optimization across all assets
+        for a chosen timeframe + strategy, with optional C4 filter.
+        """
+        default_tf = self.timeframe_var.get()
+        default_strategy = self.strategy_var.get()
+        default_mode = self.mode_var.get()
+        default_use_router = self.use_router_var.get()
+
+        win = tk.Toplevel(self.root)
+        win.title("Optimize All Assets (timeframe)")
+        win.configure(bg="#0d1117")
+
+        # Timeframe, strategy, mode, router toggle
+        ttk.Label(win, text="Timeframe:").grid(row=0, column=0, sticky="w", padx=10, pady=(10, 2))
+        tf_values = self._get_available_timeframes()
+        tf_var = tk.StringVar(value=default_tf if default_tf in tf_values else (tf_values[0] if tf_values else "1h"))
+        tf_combo = ttk.Combobox(win, textvariable=tf_var, values=tf_values, state="readonly", width=20)
+        tf_combo.grid(row=0, column=1, sticky="w", padx=10, pady=(10, 2))
+
+        ttk.Label(win, text="Strategy:").grid(row=1, column=0, sticky="w", padx=10, pady=2)
+        strat_var = tk.StringVar(value=default_strategy)
+        strat_values = list(self.strategy_combo["values"])
+        strat_combo = ttk.Combobox(win, textvariable=strat_var, values=strat_values, state="readonly", width=40)
+        strat_combo.grid(row=1, column=1, sticky="ew", padx=10, pady=2)
+
+        ttk.Label(win, text="Mode:").grid(row=2, column=0, sticky="w", padx=10, pady=2)
+        mode_var = tk.StringVar(value=default_mode)
+        mode_combo = ttk.Combobox(
+            win,
+            textvariable=mode_var,
+            values=["conservative", "balanced", "aggressive"],
+            state="readonly",
+            width=20,
+        )
+        mode_combo.grid(row=2, column=1, sticky="w", padx=10, pady=2)
+
+        use_router_var = tk.BooleanVar(value=default_use_router)
+        ttk.Checkbutton(
+            win,
+            text="Use Regime Router (use current router mappings)",
+            variable=use_router_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(2, 10))
+
+        # Param entries
+        ttk.Label(win, text="position_pct values (comma-separated):").grid(
+            row=4, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        pos_default = f"{float(self.position_pct_var.get()):.1f}"
+        pos_entry = ttk.Entry(win, width=40)
+        pos_entry.insert(0, pos_default)
+        pos_entry.grid(row=4, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="risk_pct values (comma-separated):").grid(
+            row=5, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        risk_default = f"{float(self.risk_pct_var.get()):.1f}"
+        risk_entry = ttk.Entry(win, width=40)
+        risk_entry.insert(0, risk_default)
+        risk_entry.grid(row=5, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="reward_rr values (comma-separated):").grid(
+            row=6, column=0, sticky="w", padx=10, pady=(5, 2)
+        )
+        rr_default = f"{float(self.rr_var.get()):.2f}"
+        rr_entry = ttk.Entry(win, width=40)
+        rr_entry.insert(0, rr_default)
+        rr_entry.grid(row=6, column=1, sticky="ew", padx=10, pady=(5, 2))
+
+        ttk.Label(win, text="Max candles (0 = all):").grid(
+            row=7, column=0, sticky="w", padx=10, pady=(5, 10)
+        )
+        max_c_default = str(self.candles_var.get())
+        max_c_entry = ttk.Entry(win, width=20)
+        max_c_entry.insert(0, max_c_default)
+        max_c_entry.grid(row=7, column=1, sticky="w", padx=10, pady=(5, 10))
+
+        # Region filter (C4)
+        filter_frame = ttk.LabelFrame(win, text="Region Filter (optional)", padding=8)
+        filter_frame.grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 5))
+
+        min_sharpe_var = tk.StringVar()
+        max_dd_var = tk.StringVar()
+        min_trades_var = tk.StringVar()
+        min_return_var = tk.StringVar()
+        top_n_var = tk.StringVar(value="50")
+        apply_filter_var = tk.BooleanVar(value=True)
+
+        ttk.Label(filter_frame, text="Min Sharpe:").grid(row=0, column=0, sticky="w")
+        min_sharpe_entry = ttk.Entry(filter_frame, width=8, textvariable=min_sharpe_var)
+        min_sharpe_entry.grid(row=0, column=1, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Max DD (%):").grid(row=0, column=2, sticky="w")
+        max_dd_entry = ttk.Entry(filter_frame, width=8, textvariable=max_dd_var)
+        max_dd_entry.grid(row=0, column=3, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Min Trades:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        min_trades_entry = ttk.Entry(filter_frame, width=8, textvariable=min_trades_var)
+        min_trades_entry.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Min Return (%):").grid(row=1, column=2, sticky="w", pady=(4, 0))
+        min_return_entry = ttk.Entry(filter_frame, width=8, textvariable=min_return_var)
+        min_return_entry.grid(row=1, column=3, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Top N:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        top_n_entry = ttk.Entry(filter_frame, width=6, textvariable=top_n_var)
+        top_n_entry.grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Checkbutton(
+            filter_frame,
+            text="Apply filter & show Top N",
+            variable=apply_filter_var,
+        ).grid(row=2, column=2, columnspan=2, sticky="w", pady=(4, 0))
+
+        # Status + results
+        status_label = ttk.Label(win, text="", foreground="#58a6ff")
+        status_label.grid(row=9, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
+
+        results_text = tk.Text(
+            win,
+            wrap="word",
+            height=20,
+            width=100,
+            bg="#0d1117",
+            fg="#c9d1d9",
+        )
+        results_text.grid(row=11, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="nsew")
+        win.grid_rowconfigure(11, weight=1)
+        win.grid_columnconfigure(1, weight=1)
+
+        def run_optimize_all_assets() -> None:
+            try:
+                tf = tf_var.get()
+                strat = strat_var.get()
+                mode = mode_var.get()
+                use_router = bool(use_router_var.get())
+
+                if not strat:
+                    messagebox.showerror("Optimizer", "No strategy selected.")
+                    return
+
+                pos_vals = self._parse_float_list(pos_entry.get(), float(self.position_pct_var.get()))
+                risk_vals = self._parse_float_list(risk_entry.get(), float(self.risk_pct_var.get()))
+                rr_vals = self._parse_float_list(rr_entry.get(), float(self.rr_var.get()))
+                try:
+                    max_c = int(max_c_entry.get())
+                except Exception:
+                    max_c = 0
+
+                param_grid = {
+                    "position_pct": pos_vals,
+                    "risk_pct": risk_vals,
+                    "reward_rr": rr_vals,
+                }
+
+                mappings = self._build_router_mappings() if use_router else None
+
+                status_label.config(text="Running asset sweep...")
+                win.config(cursor="watch")
+                win.update_idletasks()
+
+                df_res = grid_search_all_assets(
+                    timeframe=tf,
+                    strategy_name=strat,
+                    mode=mode,
+                    use_router=use_router,
+                    param_grid=param_grid,
+                    max_candles=max_c,
+                    strategy_mappings=mappings,
+                )
+
+                results_text.delete("1.0", tk.END)
+
+                if df_res.empty:
+                    results_text.insert("1.0", "No valid optimization results.\n")
+                    status_label.config(text="Asset sweep completed (0 valid assets).")
+                else:
+                    total = len(df_res)
+
+                    df_show = df_res
+                    filtered_count = total
+
+                    if apply_filter_var.get():
+                        min_sh = self._parse_optional_float(min_sharpe_var.get())
+                        max_dd = self._parse_optional_float(max_dd_var.get())
+                        min_tr = self._parse_optional_int(min_trades_var.get())
+                        min_ret = self._parse_optional_float(min_return_var.get())
+
+                        good = select_good_region(
+                            df_res,
+                            min_sharpe=min_sh,
+                            max_dd_pct=max_dd,
+                            min_trades=min_tr,
+                            min_return_pct=min_ret,
+                        )
+                        filtered_count = len(good)
+
+                        if filtered_count > 0:
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(good, top_n=top_n)
+                        else:
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(df_res, top_n=top_n)
+
+                        status_label.config(
+                            text=f"Asset sweep completed. Assets: {total}, passed filter: {filtered_count}."
+                        )
+                    else:
+                        try:
+                            top_n = int(top_n_var.get())
+                        except Exception:
+                            top_n = 50
+                        df_show = summarize_region(df_res, top_n=top_n)
+                        status_label.config(
+                            text=f"Asset sweep completed. Assets: {total}."
+                        )
+
+                    results_text.insert("1.0", df_show.to_string(index=False) + "\n")
+
+            except Exception:
+                results_text.delete("1.0", tk.END)
+                results_text.insert("1.0", "Asset sweep failed:\n\n" + traceback.format_exc())
+                status_label.config(text="Asset sweep failed.")
+            finally:
+                win.config(cursor="")
+                win.update_idletasks()
+
+        ttk.Button(win, text="Run Asset Sweep", command=run_optimize_all_assets).grid(
+            row=10, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew"
+        )
+
+    # ------------------------------------------------------------------ #
+    # OPTIMIZER WINDOW – C3 (strategy params, single asset)
+    # ------------------------------------------------------------------ #
+    def open_strategy_param_optimizer_window(self) -> None:
+        """
+        Configure and run strategy-level parameter optimization (C3)
+        for a single asset + strategy.
+
+        Notes:
+        - Always runs in NON-router mode (tests the selected strategy directly).
+        - Engine risk envelope is fixed (single position_pct / risk_pct / RR).
+        - User specifies up to 3 dotted param paths + comma-separated values.
+        """
+        default_asset_label = self.file_var.get()
+        default_strategy = self.strategy_var.get()
+        default_mode = self.mode_var.get()
+
+        win = tk.Toplevel(self.root)
+        win.title("Optimize Strategy Params (single asset)")
+        win.configure(bg="#0d1117")
+
+        # Asset / strategy / mode
+        ttk.Label(win, text="Asset:").grid(row=0, column=0, sticky="w", padx=10, pady=(10, 2))
+        asset_var = tk.StringVar(value=default_asset_label)
+        asset_values = list(self.file_combo["values"])
+        asset_combo = ttk.Combobox(win, textvariable=asset_var, values=asset_values, state="readonly", width=60)
+        asset_combo.grid(row=0, column=1, sticky="ew", padx=10, pady=(10, 2))
+
+        ttk.Label(win, text="Strategy:").grid(row=1, column=0, sticky="w", padx=10, pady=2)
+        strat_var = tk.StringVar(value=default_strategy)
+        strat_values = list(self.strategy_combo["values"])
+        strat_combo = ttk.Combobox(win, textvariable=strat_var, values=strat_values, state="readonly", width=40)
+        strat_combo.grid(row=1, column=1, sticky="ew", padx=10, pady=2)
+
+        ttk.Label(win, text="Mode:").grid(row=2, column=0, sticky="w", padx=10, pady=2)
+        mode_var = tk.StringVar(value=default_mode)
+        mode_combo = ttk.Combobox(
+            win,
+            textvariable=mode_var,
+            values=["conservative", "balanced", "aggressive"],
+            state="readonly",
+            width=20,
+        )
+        mode_combo.grid(row=2, column=1, sticky="w", padx=10, pady=2)
+
+        # Engine envelope – fixed values
+        ttk.Label(win, text="Position size % (fixed):").grid(row=3, column=0, sticky="w", padx=10, pady=(8, 2))
+        pos_val_var = tk.StringVar(value=f"{float(self.position_pct_var.get()):.1f}")
+        pos_entry = ttk.Entry(win, width=12, textvariable=pos_val_var)
+        pos_entry.grid(row=3, column=1, sticky="w", padx=10, pady=(8, 2))
+
+        ttk.Label(win, text="Risk per trade % (fixed):").grid(row=4, column=0, sticky="w", padx=10, pady=2)
+        risk_val_var = tk.StringVar(value=f"{float(self.risk_pct_var.get()):.1f}")
+        risk_entry = ttk.Entry(win, width=12, textvariable=risk_val_var)
+        risk_entry.grid(row=4, column=1, sticky="w", padx=10, pady=2)
+
+        ttk.Label(win, text="Reward:Risk (fixed):").grid(row=5, column=0, sticky="w", padx=10, pady=2)
+        rr_val_var = tk.StringVar(value=f"{float(self.rr_var.get()):.2f}")
+        rr_entry = ttk.Entry(win, width=12, textvariable=rr_val_var)
+        rr_entry.grid(row=5, column=1, sticky="w", padx=10, pady=2)
+
+        ttk.Label(win, text="Max candles (0 = all):").grid(row=6, column=0, sticky="w", padx=10, pady=(5, 10))
+        max_c_default = str(self.candles_var.get())
+        max_c_entry = ttk.Entry(win, width=12)
+        max_c_entry.insert(0, max_c_default)
+        max_c_entry.grid(row=6, column=1, sticky="w", padx=10, pady=(5, 10))
+
+        # Strategy param grid (up to 3 paths)
+        param_frame = ttk.LabelFrame(win, text="Strategy Parameter Grid", padding=8)
+        param_frame.grid(row=7, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 5))
+
+        ttk.Label(param_frame, text="Param path #1:").grid(row=0, column=0, sticky="w")
+        p1_path_var = tk.StringVar(value="entry.conditions[1].below")
+        p1_path_entry = ttk.Entry(param_frame, width=30, textvariable=p1_path_var)
+        p1_path_entry.grid(row=0, column=1, sticky="w", padx=4)
+
+        ttk.Label(param_frame, text="Values:").grid(row=0, column=2, sticky="w")
+        p1_vals_var = tk.StringVar(value="25, 30, 35, 40")
+        p1_vals_entry = ttk.Entry(param_frame, width=30, textvariable=p1_vals_var)
+        p1_vals_entry.grid(row=0, column=3, sticky="w", padx=4)
+
+        ttk.Label(param_frame, text="Param path #2:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        p2_path_var = tk.StringVar(value="exit.stop_loss")
+        p2_path_entry = ttk.Entry(param_frame, width=30, textvariable=p2_path_var)
+        p2_path_entry.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(param_frame, text="Values:").grid(row=1, column=2, sticky="w", pady=(4, 0))
+        p2_vals_var = tk.StringVar(value="2%, 3%, 4%")
+        p2_vals_entry = ttk.Entry(param_frame, width=30, textvariable=p2_vals_var)
+        p2_vals_entry.grid(row=1, column=3, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(param_frame, text="Param path #3:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        p3_path_var = tk.StringVar(value="exit.take_profit")
+        p3_path_entry = ttk.Entry(param_frame, width=30, textvariable=p3_path_var)
+        p3_path_entry.grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(param_frame, text="Values:").grid(row=2, column=2, sticky="w", pady=(4, 0))
+        p3_vals_var = tk.StringVar(value="8%, 9%, 12%")
+        p3_vals_entry = ttk.Entry(param_frame, width=30, textvariable=p3_vals_var)
+        p3_vals_entry.grid(row=2, column=3, sticky="w", padx=4, pady=(4, 0))
+
+        # Region filter (C4)
+        filter_frame = ttk.LabelFrame(win, text="Region Filter (optional)", padding=8)
+        filter_frame.grid(row=8, column=0, columnspan=2, sticky="ew", padx=10, pady=(0, 5))
+
+        min_sharpe_var = tk.StringVar()
+        max_dd_var = tk.StringVar()
+        min_trades_var = tk.StringVar()
+        min_return_var = tk.StringVar()
+        top_n_var = tk.StringVar(value="50")
+        apply_filter_var = tk.BooleanVar(value=True)
+
+        ttk.Label(filter_frame, text="Min Sharpe:").grid(row=0, column=0, sticky="w")
+        min_sharpe_entry = ttk.Entry(filter_frame, width=8, textvariable=min_sharpe_var)
+        min_sharpe_entry.grid(row=0, column=1, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Max DD (%):").grid(row=0, column=2, sticky="w")
+        max_dd_entry = ttk.Entry(filter_frame, width=8, textvariable=max_dd_var)
+        max_dd_entry.grid(row=0, column=3, sticky="w", padx=4)
+
+        ttk.Label(filter_frame, text="Min Trades:").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        min_trades_entry = ttk.Entry(filter_frame, width=8, textvariable=min_trades_var)
+        min_trades_entry.grid(row=1, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Min Return (%):").grid(row=1, column=2, sticky="w", pady=(4, 0))
+        min_return_entry = ttk.Entry(filter_frame, width=8, textvariable=min_return_var)
+        min_return_entry.grid(row=1, column=3, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Label(filter_frame, text="Top N:").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        top_n_entry = ttk.Entry(filter_frame, width=6, textvariable=top_n_var)
+        top_n_entry.grid(row=2, column=1, sticky="w", padx=4, pady=(4, 0))
+
+        ttk.Checkbutton(
+            filter_frame,
+            text="Apply filter & show Top N",
+            variable=apply_filter_var,
+        ).grid(row=2, column=2, columnspan=2, sticky="w", pady=(4, 0))
+
+        # Info + status + results
+        info_label = ttk.Label(
+            win,
+            text="Note: Strategy optimizer always runs in NON-router mode\n"
+                 "(it tests the selected strategy directly).",
+            foreground="#8b949e",
+        )
+        info_label.grid(row=9, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
+
+        status_label = ttk.Label(win, text="", foreground="#58a6ff")
+        status_label.grid(row=10, column=0, columnspan=2, sticky="w", padx=10, pady=(0, 5))
+
+        results_text = tk.Text(
+            win,
+            wrap="word",
+            height=20,
+            width=100,
+            bg="#0d1117",
+            fg="#c9d1d9",
+        )
+        results_text.grid(row=12, column=0, columnspan=2, padx=10, pady=(5, 10), sticky="nsew")
+        win.grid_rowconfigure(12, weight=1)
+        win.grid_columnconfigure(1, weight=1)
+
+        def run_strategy_opt() -> None:
+            try:
+                sel_label = asset_var.get()
+                if not sel_label:
+                    messagebox.showerror("Strategy Optimizer", "No asset selected.")
+                    return
+                asset_file = sel_label.split(" (")[0]
+
+                strat = strat_var.get()
+                if not strat:
+                    messagebox.showerror("Strategy Optimizer", "No strategy selected.")
+                    return
+
+                mode = mode_var.get()
+
+                # Engine envelope
+                try:
+                    pos_val = float(pos_val_var.get())
+                except Exception:
+                    pos_val = float(self.position_pct_var.get())
+                try:
+                    risk_val = float(risk_val_var.get())
+                except Exception:
+                    risk_val = float(self.risk_pct_var.get())
+                try:
+                    rr_val = float(rr_val_var.get())
+                except Exception:
+                    rr_val = float(self.rr_var.get())
+                try:
+                    max_c = int(max_c_entry.get())
+                except Exception:
+                    max_c = 0
+
+                # Build strategy_param_grid from up to 3 paths
+                strategy_param_grid: Dict[str, List[Any]] = {}
+                for path_var, vals_var in [
+                    (p1_path_var, p1_vals_var),
+                    (p2_path_var, p2_vals_var),
+                    (p3_path_var, p3_vals_var),
+                ]:
+                    path = path_var.get().strip()
+                    if not path:
+                        continue
+                    vals = self._parse_strategy_values(vals_var.get())
+                    if vals:
+                        strategy_param_grid[path] = vals
+
+                if not strategy_param_grid:
+                    messagebox.showerror(
+                        "Strategy Optimizer",
+                        "No strategy parameter paths/values defined.\n"
+                        "Specify at least one param path and values.",
+                    )
+                    return
+
+                status_label.config(text="Running strategy param optimization...")
+                win.config(cursor="watch")
+                win.update_idletasks()
+
+                df_res = grid_search_strategy_params_single_asset(
+                    asset_file=asset_file,
+                    strategy_name=strat,
+                    mode=mode,
+                    strategy_param_grid=strategy_param_grid,
+                    position_pct=pos_val,
+                    risk_pct=risk_val,
+                    reward_rr=rr_val,
+                    max_candles=max_c,
+                )
+
+                results_text.delete("1.0", tk.END)
+
+                if df_res.empty:
+                    results_text.insert("1.0", "No valid optimization results (empty table).\n")
+                    status_label.config(text="Strategy optimization completed (0 combos).")
+                else:
+                    total = len(df_res)
+                    df_show = df_res
+                    filtered_count = total
+
+                    if apply_filter_var.get():
+                        min_sh = self._parse_optional_float(min_sharpe_var.get())
+                        max_dd = self._parse_optional_float(max_dd_var.get())
+                        min_tr = self._parse_optional_int(min_trades_var.get())
+                        min_ret = self._parse_optional_float(min_return_var.get())
+
+                        good = select_good_region(
+                            df_res,
+                            min_sharpe=min_sh,
+                            max_dd_pct=max_dd,
+                            min_trades=min_tr,
+                            min_return_pct=min_ret,
+                        )
+                        filtered_count = len(good)
+
+                        if filtered_count > 0:
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(good, top_n=top_n)
+                        else:
+                            try:
+                                top_n = int(top_n_var.get())
+                            except Exception:
+                                top_n = 50
+                            df_show = summarize_region(df_res, top_n=top_n)
+
+                        status_label.config(
+                            text=f"Strategy optimization completed. Combos: {total}, passed filter: {filtered_count}."
+                        )
+                    else:
+                        try:
+                            top_n = int(top_n_var.get())
+                        except Exception:
+                            top_n = 50
+                        df_show = summarize_region(df_res, top_n=top_n)
+                        status_label.config(
+                            text=f"Strategy optimization completed. Combos: {total}."
+                        )
+
+                    results_text.insert("1.0", df_show.to_string(index=False) + "\n")
+
+            except Exception:
+                results_text.delete("1.0", tk.END)
+                results_text.insert("1.0", "Strategy optimization failed:\n\n" + traceback.format_exc())
+                status_label.config(text="Strategy optimization failed.")
+            finally:
+                win.config(cursor="")
+                win.update_idletasks()
+
+        ttk.Button(win, text="Run Strategy Optimization", command=run_strategy_opt).grid(
+            row=11, column=0, columnspan=2, padx=10, pady=(0, 5), sticky="ew"
+        )
 
     # ------------------------------------------------------------------ #
     # RUN DISPATCH
@@ -466,7 +1370,7 @@ class BacktesterGUI:
         except Exception:
             err = f"\nALL-STRATEGIES BACKTEST FAILED:\n{traceback.format_exc()}"
             self.output_text.insert(tk.END, err)
-            messagebox.showerror("Backtest Failed", "Check output.")
+            messagebox.showerror("Backtest Failed", "Backtest Failed")
 
     # ------------------------------------------------------------------ #
     # ALL ASSETS
@@ -503,7 +1407,7 @@ class BacktesterGUI:
         except Exception:
             err = f"\nALL-ASSETS BACKTEST FAILED:\n{traceback.format_exc()}"
             self.output_text.insert(tk.END, err)
-            messagebox.showerror("Backtest Failed", "Check output.")
+            messagebox.showerror("Backtest Failed", "Backtest Failed")
 
     # ------------------------------------------------------------------ #
     # COPY OUTPUT
@@ -514,4 +1418,4 @@ class BacktesterGUI:
         messagebox.showinfo("Copied", "Output copied!")
 
 
-# gui/backtester_gui.py v2.0 (517 lines)
+# gui/backtester_gui.py v2.4 (1421 lines)
