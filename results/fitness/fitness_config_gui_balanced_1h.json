@@ -10,7 +10,7 @@
     "1h"
   ],
   "mode": "balanced",
-  "use_router": false,
+  "use_router": true,
   "max_candles": 0,
   "position_pct": 15.0,
   "risk_pct": 1.0,

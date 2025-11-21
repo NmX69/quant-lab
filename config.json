@@ -3,7 +3,7 @@
   "timeframe": "1h",
   "strategy": "range_rsi_bb",
   "mode": "balanced",
-  "use_router": true,
+  "use_router": false,
   "trending_up_strategy": "trend_macd",
   "trending_down_strategy": "trend_macd",
   "ranging_strategy": "ranging_stochastic",
@@ -11,6 +11,6 @@
   "risk_pct": 1.0,
   "reward_rr": 1.5,
   "candles": 5000,
-  "run_mode": "Single",
+  "run_mode": "All Strategies",
   "show_equity": false
 }

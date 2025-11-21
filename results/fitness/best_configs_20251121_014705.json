@@ -1,0 +1,104 @@
+{
+  "schema_version": "1.0",
+  "sdl_schema_version": "1.0",
+  "generated_at": "2025-11-21T01:47:05Z",
+  "generated_from": "fitness_gui_session",
+  "description": "",
+  "mappings": [
+    {
+      "asset": "XRPUSDT",
+      "timeframe": "1h",
+      "regime": "balanced",
+      "strategy_id": "range_mean_reversion",
+      "strategy_name": "range_mean_reversion",
+      "risk_model": {
+        "position_pct": 15.0,
+        "risk_pct": 1.0
+      },
+      "performance_snapshot": {
+        "total_return_pct": 1.2409918402105604,
+        "winrate_pct": 50.47169811320755,
+        "expectancy_R": 0.0083767623144863,
+        "max_dd_pct": 14.205892014273836,
+        "total_trades": 212,
+        "stability_score": 0.6684620642912273
+      }
+    },
+    {
+      "asset": "XRPUSDT",
+      "timeframe": "1h",
+      "regime": "balanced",
+      "strategy_id": "range_rsi_bb",
+      "strategy_name": "range_rsi_bb",
+      "risk_model": {
+        "position_pct": 15.0,
+        "risk_pct": 1.0
+      },
+      "performance_snapshot": {
+        "total_return_pct": 1.2409918402105604,
+        "winrate_pct": 50.47169811320755,
+        "expectancy_R": 0.0083767623144863,
+        "max_dd_pct": 14.205892014273836,
+        "total_trades": 212,
+        "stability_score": 0.6684620642912273
+      }
+    },
+    {
+      "asset": "XRPUSDT",
+      "timeframe": "1h",
+      "regime": "balanced",
+      "strategy_id": "ranging_stochastic",
+      "strategy_name": "ranging_stochastic",
+      "risk_model": {
+        "position_pct": 15.0,
+        "risk_pct": 1.0
+      },
+      "performance_snapshot": {
+        "total_return_pct": 1.2409918402105604,
+        "winrate_pct": 50.47169811320755,
+        "expectancy_R": 0.0083767623144863,
+        "max_dd_pct": 14.205892014273836,
+        "total_trades": 212,
+        "stability_score": 0.6684620642912273
+      }
+    },
+    {
+      "asset": "XRPUSDT",
+      "timeframe": "1h",
+      "regime": "balanced",
+      "strategy_id": "trend_macd",
+      "strategy_name": "trend_macd",
+      "risk_model": {
+        "position_pct": 15.0,
+        "risk_pct": 1.0
+      },
+      "performance_snapshot": {
+        "total_return_pct": 1.2409918402105604,
+        "winrate_pct": 50.47169811320755,
+        "expectancy_R": 0.0083767623144863,
+        "max_dd_pct": 14.205892014273836,
+        "total_trades": 212,
+        "stability_score": 0.6684620642912273
+      }
+    },
+    {
+      "asset": "XRPUSDT",
+      "timeframe": "1h",
+      "regime": "balanced",
+      "strategy_id": "trending_ema_crossover",
+      "strategy_name": "trending_ema_crossover",
+      "risk_model": {
+        "position_pct": 15.0,
+        "risk_pct": 1.0
+      },
+      "performance_snapshot": {
+        "total_return_pct": 1.2409918402105604,
+        "winrate_pct": 50.47169811320755,
+        "expectancy_R": 0.0083767623144863,
+        "max_dd_pct": 14.205892014273836,
+        "total_trades": 212,
+        "stability_score": 0.6684620642912273
+      }
+    }
+  ]
+}

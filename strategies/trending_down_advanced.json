@@ -1,0 +1,44 @@
+{
+  "extends": "trending_base",
+  "name": "Trending Down – Advanced (4h Filter + Volume Confirmation)",
+  "regime": "trending_down",
+  "direction": "short",
+
+  "mtf": {
+    "higher_timeframes": [
+      {
+        "timeframe": "4h",
+        "role": "trend_filter",
+        "conditions": [
+          { "type": "price_below_ema", "period": 200 }
+        ]
+      }
+    ]
+  },
+
+  "entry": {
+    "conditions": [
+      { "type": "ema_cross", "fast": 9, "slow": 21, "direction": "down" },
+      { "type": "rsi", "above": 30 },
+      { "type": "volume_zscore", "above": 1.0, "lookback": 20 }
+    ]
+  },
+
+  "exit": {
+    "stop_loss": { "type": "atr", "multiple": 2.5 },
+    "take_profit": 0.12,
+    "partial_exit": 0.5,
+    "signal_exit": [
+      { "type": "ema_cross", "fast": 9, "slow": 21, "direction": "up" }
+    ]
+  },
+
+  "risk": {
+    "sizing": "equity_pct",
+    "risk_per_trade_pct": 1.8
+  },
+
+  "live_settings": {
+    "hellmoon_compatible": true
+  }
+}

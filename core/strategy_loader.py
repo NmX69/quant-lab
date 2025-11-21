@@ -1,10 +1,15 @@
 # core/strategy_loader.py
-# PHASE 6: VALIDATION FOR NEW CONDITIONS (EMA/STOCH CROSS, ATR FIELDS)
+# Purpose: Load SDL JSON strategies from disk, resolve inheritance, validate them, and expose lookup helpers.
+# API's: load_strategies, get_strategy, list_strategies
+# Notes: Uses sdl_validator for schema enforcement and supports optional 'extends' inheritance.
 
-import os
+import copy
 import json
-from typing import Dict, List
 import logging
+import os
+from typing import Dict, List
+
+from core.sdl_validator import ValidationError, validate_strategy_dict
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
@@ -13,75 +18,25 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STRATEGIES_DIR = os.path.join(PROJECT_ROOT, "strategies")
 
 _STRATEGIES: Dict[str, Dict] = {}
-_LOADED = False
+_LOADED: bool = False
 
 
 def _validate_strategy(name: str, data: Dict) -> None:
-    required = ["name", "regime", "direction", "entry", "exit", "risk"]
-    for field in required:
-        if field not in data:
-            raise ValueError(f"Strategy '{name}': missing '{field}'")
+    """Validate a single strategy using the SDL validator.
 
-    valid_regimes = ["trending", "trending_up", "trending_down", "ranging", "both"]
-    if data["regime"] not in valid_regimes:
-        raise ValueError(
-            f"Strategy '{name}': invalid regime '{data['regime']}'. Must be one of {valid_regimes}"
-        )
+    Raises:
+        ValueError: if any validation errors are present.
+    """
 
-    if data["direction"] not in ["long", "short", "both"]:
-        raise ValueError(f"Strategy '{name}': invalid direction")
-
-    if not isinstance(data["entry"].get("conditions"), list):
-        raise ValueError(f"Strategy '{name}': entry.conditions must be list")
-
-    if "stop_loss" not in data["exit"]:
-        raise ValueError(f"Strategy '{name}': exit.stop_loss required")
-
-    # Validate new risk fields
-    sizing = data["risk"]["sizing"]
-    if sizing == "atr" and "atr_multiplier" not in data["risk"]:
-        raise ValueError(f"Strategy '{name}': atr sizing requires atr_multiplier")
-    if sizing == "fixed_usd" and "max_exposure_usd" not in data["risk"]:
-        raise ValueError(f"Strategy '{name}': fixed_usd requires max_exposure_usd")
-    if sizing == "equity_pct" and "risk_per_trade_pct" not in data["risk"]:
-        raise ValueError(f"Strategy '{name}': equity_pct requires risk_per_trade_pct")
-
-    # Validate conditions
-    valid_conditions = [
-        "macd_cross",
-        "ema_cross",
-        "stochastic_cross",
-        "adx",
-        "rsi",
-        "price_above_ema",
-        "price_below_ema",
-        "price_above_bb",
-        "price_below_bb",
-        "price_near_bb_lower",
-        "price_near_bb_upper",
-        "price_crosses_mid_bb",
-        "price_crosses_mid_bb_down",
-        "volume_zscore",
-    ]
-    for cond in data["entry"]["conditions"]:
-        if cond["type"] not in valid_conditions:
-            raise ValueError(
-                f"Strategy '{name}': invalid condition type '{cond['type']}'"
-            )
-        if cond["type"] == "ema_cross":
-            if "fast" not in cond or "slow" not in cond:
-                raise ValueError(
-                    f"Strategy '{name}': ema_cross requires fast and slow periods"
-                )
-
-    for cond in data["exit"].get("signal_exit", []):
-        if cond["type"] not in valid_conditions:
-            raise ValueError(
-                f"Strategy '{name}': invalid exit condition type '{cond['type']}'"
-            )
+    errors = validate_strategy_dict(name, data)
+    if errors:
+        joined = "; ".join(f"{err.path}: {err.message}" for err in errors)
+        raise ValueError(joined)
 
 
 def _create_fallback() -> None:
+    """Install a hard-coded fallback strategy when no JSON files can be loaded."""
+
     fallback = {
         "name": "Fallback Trend",
         "regime": "trending",
@@ -105,11 +60,74 @@ def _create_fallback() -> None:
     logger.info("Fallback strategy 'fallback_trend' loaded")
 
 
+def _resolve_inheritance(raw_strategies: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Resolve optional 'extends' inheritance between strategies.
+
+    Each strategy may define::
+
+        "extends": "base_strategy_key"
+
+    The resolution rules are:
+
+    * If no 'extends' is present, the strategy is used as-is (deep-copied).
+    * If 'extends' is present, the base strategy is resolved first, then the
+      child is shallow-merged on top at the top level. Complex sections like
+      'entry', 'exit', and 'risk' are replaced as whole blocks by the child
+      when provided.
+    * Inheritance cycles raise ValueError with a descriptive message.
+    * Referencing a non-existent base strategy also raises ValueError.
+    """
+
+    resolved: Dict[str, Dict] = {}
+    visiting: set[str] = set()
+
+    def resolve(name: str) -> Dict:
+        if name in resolved:
+            return resolved[name]
+        if name not in raw_strategies:
+            raise ValueError(
+                f"Strategy '{name}' referenced in 'extends' but no JSON file found"
+            )
+        if name in visiting:
+            cycle = " -> ".join(list(visiting) + [name])
+            raise ValueError(f"Inheritance cycle detected: {cycle}")
+
+        visiting.add(name)
+        data = raw_strategies[name]
+
+        base_key = data.get("extends")
+        if base_key:
+            base_key_lower = str(base_key).lower()
+            base_resolved = resolve(base_key_lower)
+            base_copy = copy.deepcopy(base_resolved)
+            child_copy = copy.deepcopy(data)
+            # Do not keep 'extends' in the final resolved strategy.
+            child_copy.pop("extends", None)
+            # Shallow top-level merge: child keys override base keys entirely.
+            base_copy.update(child_copy)
+            merged = base_copy
+        else:
+            merged = copy.deepcopy(data)
+
+        resolved[name] = merged
+        visiting.remove(name)
+        return merged
+
+    for key in raw_strategies.keys():
+        resolve(key)
+
+    return resolved
+
+
 def load_strategies() -> None:
-    """Load all *.json files from the strategies folder."""
+    """Load all *.json files from the strategies folder.
+
+    This function is idempotent: repeated calls will return immediately once
+    the strategies are loaded.
+    """
+
     global _LOADED, _STRATEGIES
     if _LOADED:
-        # Already loaded; avoid spamming logs on repeated calls
         return
 
     _STRATEGIES.clear()
@@ -130,7 +148,9 @@ def load_strategies() -> None:
         _LOADED = True
         return
 
+    raw_strategies: Dict[str, Dict] = {}
     loaded_any = False
+
     for filename in files:
         name = os.path.splitext(filename)[0].lower()
         path = os.path.join(STRATEGIES_DIR, filename)
@@ -148,9 +168,7 @@ def load_strategies() -> None:
             data = json.loads(content)
             logger.info(f"JSON parsed: {data.get('name', 'Unnamed')}")
 
-            _validate_strategy(name, data)
-            _STRATEGIES[name] = data
-            logger.info(f"Successfully loaded strategy: '{name}'")
+            raw_strategies[name] = data
             loaded_any = True
 
         except json.JSONDecodeError as e:
@@ -158,31 +176,69 @@ def load_strategies() -> None:
                 f"JSON ERROR in {filename}: {e} (line {e.lineno}, col {e.colno})"
             )
         except Exception as e:
-            logger.error(f"VALIDATION ERROR in {filename}: {e}")
+            logger.error(f"ERROR while loading {filename}: {e}")
 
     if not loaded_any:
         logger.warning("No valid strategies loaded — using fallback")
+        _STRATEGIES.clear()
         _create_fallback()
+        _LOADED = True
+        logger.info(
+            f"Strategy loading complete. Loaded keys: {list(_STRATEGIES.keys())}",
+        )
+        return
+
+    # Resolve inheritance (extends) and validate resolved strategies.
+    try:
+        resolved = _resolve_inheritance(raw_strategies)
+    except Exception as e:
+        logger.error(f"Error while resolving strategy inheritance: {e}")
+        _STRATEGIES.clear()
+        _create_fallback()
+        _LOADED = True
+        logger.info(
+            f"Strategy loading complete. Loaded keys: {list(_STRATEGIES.keys())}",
+        )
+        return
+
+    validated: Dict[str, Dict] = {}
+    for name, data in resolved.items():
+        try:
+            _validate_strategy(name, data)
+            validated[name] = data
+            logger.info(f"Successfully loaded strategy: '{name}'")
+        except Exception as e:
+            logger.error(f"VALIDATION ERROR in '{name}': {e}")
+
+    if not validated:
+        logger.warning("No valid strategies after validation — using fallback")
+        _STRATEGIES.clear()
+        _create_fallback()
+    else:
+        _STRATEGIES = validated
 
     _LOADED = True
     logger.info(
-        f"Strategy loading complete. Loaded keys: {list(_STRATEGIES.keys())}"
+        f"Strategy loading complete. Loaded keys: {list(_STRATEGIES.keys())}",
     )
 
 
 def get_strategy(name: str) -> Dict:
     """Return the loaded strategy dict for *name* (filename stem, lower-cased)."""
+
     load_strategies()
-    name = name.lower()
-    if name not in _STRATEGIES:
+    key = name.lower()
+    if key not in _STRATEGIES:
         available = list(_STRATEGIES.keys())
-        raise ValueError(f"Strategy '{name}' not found. Available: {available}")
-    return _STRATEGIES[name]
+        raise ValueError(
+            f"Strategy '{key}' not found. Available: {available}",
+        )
+    return _STRATEGIES[key]
 
 
 def list_strategies() -> List[str]:
     """Return a sorted list of all loaded strategy keys."""
+
     load_strategies()
     return sorted(_STRATEGIES.keys())
-
-# core/strategy_loader.py v1.2 (188 lines)
+# core/strategy_loader.py v1.3 (244 lines)

@@ -1,0 +1,5 @@
+section,meta_asset,meta_mode,meta_final_equity,meta_total_return_pct,meta_total_trades,meta_winrate,meta_sharpe,meta_max_dd,meta_max_dd_pct,meta_regime_changes,risk_expectancy_R,risk_avg_R_win,risk_avg_R_loss,risk_winrate_pct,risk_lossrate_pct,risk_mean_return_pct,risk_volatility_pct,risk_sortino,risk_mar,streaks_longest_win_streak,streaks_longest_loss_streak,regime_candles,regime_pnl,regime_pnl_pct,regime_trades,regime_winrate,regime_lossrate,regime_expectancy_R,regime_avg_R_win,regime_avg_R_loss
+overall,XRPUSDT_1h,balanced,100.04073249046962,0.04073249046962314,10.0,50.0,0.61,2.7075793469973917,2.691007175032246,74.0,0.006785806362518465,0.5985709997403705,-0.5849993870153336,50.0,50.0,0.044560128447204854,5.089162928158413,0.01070550606804418,0.029729569474976986,4.0,4.0,,,,,,,,,
+regime_trending_up,,,,,,,,,,,,,,,,,,,,,,370.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+regime_trending_down,,,,,,,,,,,,,,,,,,,,,,3447.0,1.4026874957401962,1.4026874957401962,8.0,62.5,37.5,0.18079930194380106,0.5985709997403705,-0.5154868610504814
+regime_ranging,,,,,,,,,,,,,,,,,,,,,,1133.0,-1.3619550052705731,-1.3619550052705731,2.0,0.0,100.0,-0.6892681759626118,0.0,-0.6892681759626118

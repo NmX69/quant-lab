@@ -190,6 +190,10 @@ def create_left_panel(gui: Any) -> None:
         row=12, column=0, columnspan=3, pady=(10, 0)
     )
 
+    ttk.Button(left, text="RUN MAPPED BACKTEST", command=gui.run_mapped_backtest).grid(
+        row=13, column=0, columnspan=3, pady=(6, 0)
+    )
+
 
 def create_right_panel(gui: Any) -> None:
     """
@@ -252,4 +256,4 @@ def create_right_panel(gui: Any) -> None:
     gui.equity_frame.grid_rowconfigure(0, weight=1)
     gui.equity_frame.grid_columnconfigure(0, weight=1)
 
-# gui/layout.py v0.2 (255 lines)
+# gui/layout.py v0.3 (260 lines)

@@ -17,10 +17,16 @@ core\asset_fitness.py
   - Major External Functions/Classes:
   - - run_fitness_for_strategy
 
+core\asset_fitness_mapping.py
+  - core/asset_fitness_mapping.py
+  - Purpose: Helpers to convert asset fitness results into Phase E fitness_records.
+  - API's: build_fitness_records_for_mapping
+  - Notes: Thin adapter over Phase D outputs; does not change any fitness behavior.
+
 core\backtest_runner.py
   - core/backtest_runner.py
   - Purpose: Run single, all-strategy, and all-asset backtests without any GUI dependencies.
-  - Major APIs: run_single_backtest, run_all_strategies_backtest, run_all_assets_backtest
+  - Major APIs: run_single_backtest, run_all_strategies_backtest, run_all_assets_backtest, run_mapped_backtest_from_file
   - Notes: Uses core.engine.run_backtest, core.indicators.add_indicators_and_regime, and core.reporting.
 
 core\conditions.py
@@ -56,6 +62,18 @@ core\fitness_cli.py
 core\indicators.py
   - core/indicators.py
   - PHASE 6: ADDED EMA_50, STOCHASTIC, ATR
+
+core\mapped_router.py
+  - core/mapped_router.py
+  - Purpose: Provide mapping-aware strategy selection and override application for Phase E.
+  - APIs: load_mapping_set, MappingIndex, apply_overrides_to_strategy, resolve_mapped_strategy_config
+  - Notes: Pure core helper; used by backtest_runner and Phase E tooling.
+
+core\mapping_generator.py
+  - core/mapping_generator.py
+  - Purpose: Generate, save, and load Phase E best-config mapping files from fitness results.
+  - API's: build_mapping_set, save_mapping_set, load_mapping_set
+  - Notes: Pure Phase E module; operates on generic fitness records and does not depend on GUI.
 
 core\optimizer.py
   - core/optimizer.py
@@ -130,6 +148,8 @@ core\strategy_loader.py
   - PHASE 6: VALIDATION FOR NEW CONDITIONS (EMA/STOCH CROSS, ATR FIELDS)
 
 
+exports/
+
 gui/
 gui\backtester_gui.py
   - gui/backtester_gui.py
@@ -142,6 +162,12 @@ gui\fitness_detail_window.py
   - Purpose: Detail popup for a single fitness matrix row (Phase D).
   - Major External Classes:
   - - FitnessDetailWindow(tk.Toplevel)
+
+gui\fitness_mapping_export.py
+  - gui/fitness_mapping_export.py
+  - Purpose: GUI helpers to export Phase E best-config mapping files from fitness results.
+  - API's: export_best_config_schema_dialog
+  - Notes: Intended to be called from FitnessTabbedWindow in gui/fitness_window.py.
 
 gui\fitness_window.py
   - gui/fitness_window.py

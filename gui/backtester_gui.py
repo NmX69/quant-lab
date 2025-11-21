@@ -10,7 +10,7 @@ import traceback
 from typing import Any, Dict, Optional, List
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 
 from core.config_manager import (
     load_config,
@@ -21,6 +21,7 @@ from core.backtest_runner import (
     run_single_backtest,
     run_all_strategies_backtest,
     run_all_assets_backtest,
+    run_mapped_backtest_from_file,
 )
 from core.strategy_loader import load_strategies, list_strategies
 from core.reporting import build_report
@@ -489,6 +490,92 @@ class BacktesterGUI:
     # ------------------------------------------------------------------ #
     # SINGLE BACKTEST HANDLER
     # ------------------------------------------------------------------ #
+
+    def run_mapped_backtest(self) -> None:
+        """Run a Phase E mapped backtest using a best_configs_*.json file.
+
+        This uses the current single-run settings (asset/timeframe, sizing,
+        candles, mode) but routes strategy selection via the mapping file.
+        """
+        # Clear previous output but keep config persistence
+        self.output_text.delete("1.0", tk.END)
+        self.fig.clear()
+
+        # Let the user pick a Phase E mapping JSON file
+        mapping_path = filedialog.askopenfilename(
+            title="Select Phase E mapping file",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+        )
+        if not mapping_path:
+            return
+
+        # Persist current config to disk
+        self.save_current_config()
+
+        mode = self.mode_var.get()
+        try:
+            max_c = int(self.candles_var.get())
+        except Exception:
+            max_c = 0
+
+        position_pct = float(self.position_pct_var.get())
+        risk_pct = float(self.risk_pct_var.get())
+        reward_rr = float(self.rr_var.get())
+
+        sel = self.file_var.get()
+        if not sel:
+            messagebox.showerror("Error", "No data file selected")
+            return
+
+        parts = sel.split()
+        asset = parts[0]
+        timeframe = parts[1] if len(parts) > 1 else self.timeframe_var.get()
+        asset_file = f"{asset}_{timeframe}.csv"
+
+        try:
+            preamble, summary, result = run_mapped_backtest_from_file(
+                mapping_path=mapping_path,
+                asset_file=asset_file,
+                mode=mode,
+                max_candles=max_c,
+                position_pct=position_pct,
+                risk_pct=risk_pct,
+                reward_rr=reward_rr,
+            )
+
+            self.summary = summary
+
+            heading = f"[MAPPED] Using mapping file: {os.path.basename(mapping_path)}\n\n"
+            self.output_text.insert(tk.END, heading)
+            self.output_text.insert(tk.END, preamble)
+            self.output_text.insert(tk.END, self.summary)
+
+            try:
+                report = build_report(result)
+                self.latest_report = report
+                self.latest_report_label = (
+                    f"{asset} | mapped | {mode} (Phase E mapping: {os.path.basename(mapping_path)})"
+                )
+                self.report_available = True
+                try:
+                    self.reports_menu.entryconfig("Show Last Analytics", state="normal")
+                except Exception:
+                    pass
+            except Exception:
+                self.output_text.insert(
+                    tk.END,
+                    "\n[Reporting] Failed to build analytics report. See logs for details.\n",
+                )
+
+            if self.equity_var.get() and getattr(result, "trades", None):
+                plot_equity_curve(self.fig, result.trades)
+                self.canvas.draw()
+
+            self.output_text.insert(tk.END, "\nMapped backtest completed.\n")
+        except Exception:
+            err = f"\nMAPPED BACKTEST FAILED:\n{traceback.format_exc()}"
+            self.output_text.insert(tk.END, err)
+            messagebox.showerror("Mapped Backtest Failed", "Check output.")
     def _run_single(
         self,
         mode: str,
@@ -649,4 +736,4 @@ class BacktesterGUI:
         self.root.clipboard_append(self.summary)
         messagebox.showinfo("Copied", "Output copied!")
 
-# gui/backtester_gui.py v3.2 (652 lines)
+# gui/backtester_gui.py v3.3 (654 lines)

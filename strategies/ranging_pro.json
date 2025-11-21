@@ -1,0 +1,31 @@
+{
+  "name": "Ranging Pro – BB Contraction + Low ADX",
+  "regime": "ranging",
+  "direction": "both",
+
+  "entry": {
+    "conditions": [
+      { "type": "price_near_bb_lower", "distance_pct": 1.5 },
+      { "type": "price_near_bb_upper", "distance_pct": 1.5 },
+      { "type": "adx", "below": 20 }
+    ]
+  },
+
+  "exit": {
+    "stop_loss": { "type": "atr", "multiple": 1.8 },
+    "take_profit": 0.06,
+    "partial_exit": 0.6,
+    "signal_exit": [
+      { "type": "price_crosses_mid_bb" }
+    ]
+  },
+
+  "risk": {
+    "sizing": "equity_pct",
+    "risk_per_trade_pct": 1.2
+  },
+
+  "live_settings": {
+    "hellmoon_compatible": false
+  }
+}

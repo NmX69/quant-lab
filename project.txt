@@ -4,7 +4,7 @@
 # **0. AI RULES (NON-NEGOTIABLE)**
 
 1. Never redesign or refactor finished phases without explicit instruction.
-2. Never add new directories, dependencies, or persistence without explicit user order.
+2. Never add new directories, dependencies, or persistence unless it's architecturally sound.
 3. Only work on the current declared phase (right now = **Phase E**).
 4. Never move logic out of JSON strategies (SDL evolves only in Phase F, with explicit approval).
 5. Always answer user's question or provide any analysis before providing code blocks or files.
@@ -13,6 +13,23 @@
 8. If unclear → ask; do not guess.
 9. Violating any rule above invalidates the entire response.
 10. If delivering a zip file, ensure it is VS Code–readable on Windows with proper CRLF, indentation, and no collapsed single-line returns. Deliver only new & changed files.
+11. Every py file must have the following header.  If not found there during a file update, it should be created and added/updated.  Upon updating any file and adding APIs, header should be updated to reflect reality.  Every newly created file should have it as well:
+# File path
+# Purpose:
+# API's: 
+# Notes: 
+
+EXAMPLE:
+# quant_lab.py
+# Purpose: Quant-Lab entrypoint (currently launches the backtester GUI).
+# APIs: BacktesterGUI
+# Notes: Replaced backtester.py as entry point.  Calls BacktesterGUI from gui/backtester_gui.py
+
+12. Every py file must have the following last-line footer.  Every update of a file should increment the verion and update file lines of code:
+# file-path version (NNN lines)
+
+EXAMPLE:
+# gui/backtester_gui.py v0.3 (619 lines)
 
 ---
 
@@ -84,89 +101,9 @@ Both share the same conceptual engine, strategy definitions, regime logic, and r
 
 ---
 
-# **3. CURRENT STATE OF CODEBASE (AS-IS)**
+# **3. CURRENT STATE OF CODEBASE**
 
-*(Derived directly from scanning the repo.)*
-
-### **core/engine.py**
-
-* The heart of the backtesting engine
-* Handles trade execution, entry/exit logic, position sizing, fee modeling, order simulation
-* Regime-aware routing is delegated to `regime_router.py`
-* Reads and interprets strategy JSON from loader
-
-### **core/strategy_loader.py**
-
-* Parses SDL JSON strategy files
-* Validates conditions, entries, exits
-* Produces runtime-friendly structures used by engine and optimizer
-
-### **core/conditions.py / core/exits.py**
-
-* Implements conditional logic and exit logic as defined in SDL
-* Fully decoupled from indicators
-* Pure evaluation functions
-
-### **core/indicators.py**
-
-* All TA indicators: EMA, RSI, BB, ATR, stochastic, etc.
-* Bulk of technical functions used across strategies
-
-### **core/regime_router.py**
-
-* Evaluates market regime
-* Routes between “balanced,” “trending,” “ranging,” “custom” modes
-* Supports running regime-specific strategies
-
-### **core/sizing.py**
-
-* Centralized risk model
-* Position sizing logic using equity_pct, atr_pct, percent of wallet, etc.
-
-### **core/optimizer*.py**
-
-* Four optimizers: strategy, region, engine, and common utilities
-* Already supports fitness scoring, parameter sweeps, multi-strategy evaluation
-* Produces meaningful performance reports and fitness metrics
-
-### **core/asset_fitness.py / core/fitness_cli.py**
-
-* Fitness engine to determine best strategies per asset/regime/timeframe
-* CLI + integration points for GUI / schema exporter
-
-### **core/results.py + core/results_builder.py + core/results_display.py**
-
-* Unified results abstraction
-* Building, formatting, and displaying results in GUI
-
-### **core/config_manager.py**
-
-* Load/merge config files
-* Manage runner options
-* Bridge GUI → backtesting engine
-
-### **core/backtest_runner.py**
-
-* Headless batch backtester
-* Used by GUI as an execution backend
-
-### **gui/backtester_gui.py**
-
-* Primary GUI
-* Strategy selection, parameter entry, risk model selection
-* Runs backtests, displays results, opens detail windows
-* Stable and functional
-
-### **gui/fitness_detail_window.py**
-
-* GUI for fitness engine output
-* Will be expanded to integrate “Save Best Schema → Quant-Lab-Live”
-
-### **data/**
-
-* CSV historical datasets
-* `manifest.json` for listing assets + metadata
-
+See project_tree.txt
 ---
 
 # **4. FUTURE SYSTEM: QUANT-LAB-LIVE**
@@ -259,7 +196,7 @@ Hellmoon signals flow through the **same strategy schema and risk model** as nor
 
 ---
 
-# **6. UNIFIED STRATEGY SCHEMA (BACKWARD COMPATIBLE)**
+# **6. UNIFIED STRATEGY SCHEMA (BACKWARD COMPATIBLE) - COMPLETED**
 
 The future schema must:
 
@@ -368,8 +305,8 @@ quant-lab-live/
 * **Phase B — Reporting Engine** → ✅ **COMPLETE** (`core/reporting.py` implemented & wired)
 * **Phase C — Parameter Optimizer** → ✅ **COMPLETE** (optimizer modules implemented)
 * **Phase D — Asset Fitness Tester** → ✅ **COMPLETE** (`asset_fitness` + CLI + GUI integration)
-* **Phase E — Strategy–Regime–Asset Mapping** → 🔵 **ACTIVE PHASE**
-* **Phase F — SDL Evolution** → ⏳ Not started (design + schema evolution)
+* **Phase E — Strategy–Regime–Asset Mapping** → ✅ **COMPLETE**
+* **Phase F — SDL Evolution** → ✅ **COMPLETE**
 * **Phase G — Unified Portfolio Engine** → ⏳ Not started
 * **Phase H — Real-Time Scanners (incl. Hellmoon)** → ⏳ Not started
 * **Phase I — Multi-Timeframe System** → ⏳ Not started
@@ -516,7 +453,8 @@ We already have **all the ingredients** to select “best-in-class” configurat
 
 ---
 
-### 9.5 PHASE E — STRATEGY–REGIME–ASSET MAPPING (🔵 ACTIVE PHASE)
+### 9.5 PHASE E — STRATEGY–REGIME–ASSET MAPPING (✅ COMPLETE)
+
 
 **Goal**
 Autogenerate **router-ready schemas** that map:
@@ -566,7 +504,7 @@ This is the bridge from **Quant-Lab** (research) to **Quant-Lab-Live** (deployme
 
 ---
 
-### 9.6 PHASE F — SDL EVOLUTION (Schema-Safe)
+### 9.6 PHASE F (✅ COMPLETE)
 
 **Goal**
 Extend the Strategy Definition Language without breaking existing strategies or saved configs.
@@ -854,4 +792,4 @@ And both use the same schemas and strategy definitions.
 
 12. Redo Optimizer windows to be like the tabbed Fitness windows and be full screen
 
-# /project.txt v2.0 (857 lines)
+# /project.txt v2.1 (795 lines)

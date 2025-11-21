@@ -1,6 +1,6 @@
 # core/backtest_runner.py
 # Purpose: Run single, all-strategy, and all-asset backtests without any GUI dependencies.
-# Major APIs: run_single_backtest, run_all_strategies_backtest, run_all_assets_backtest
+# Major APIs: run_single_backtest, run_all_strategies_backtest, run_all_assets_backtest, run_mapped_backtest_from_file
 # Notes: Uses core.engine.run_backtest, core.indicators.add_indicators_and_regime, and core.reporting.
 
 import json
@@ -13,6 +13,8 @@ import pandas as pd
 from core.engine import run_backtest
 from core.indicators import add_indicators_and_regime
 from core.strategy_loader import list_strategies
+from core.mapping_generator import load_mapping_set
+from core.mapped_router import MappingIndex
 from core.results import BacktestResult
 from core.reporting import build_report, export_report_json, export_report_csv
 from core.config_manager import DATA_DIR, RESULTS_DIR, MANIFEST_FILE
@@ -168,6 +170,118 @@ def run_single_backtest(
     return preamble, summary_text, result
 
 
+
+def run_mapped_backtest_from_file(
+    mapping_path: str,
+    asset_file: str,
+    mode: str,
+    max_candles: int,
+    position_pct: float,
+    risk_pct: float,
+    reward_rr: float,
+) -> Tuple[str, str, BacktestResult]:
+    """Run a mapped backtest using a Phase E best-config mapping file.
+
+    This helper wires Phase E mapping artifacts into the existing backtest
+    runner without changing the engine API. It:
+
+    - Loads the mapping_set JSON via core.mapping_generator.load_mapping_set
+    - Builds a regime->strategy mapping for the given asset/timeframe
+    - Applies risk_model values from the mapping (if present), falling back
+      to the explicit function arguments when a key is missing.
+    - Runs run_single_backtest with use_router=True and those mappings
+
+    Parameters
+    ----------
+    mapping_path:
+        Path to a best_configs_*.json file produced by save_mapping_set /
+        the Fitness GUI's "Export Mapping" button.
+    asset_file:
+        Data filename, e.g. "BTCUSDT_1h.csv". The asset and timeframe
+        are inferred from this name.
+    mode:
+        Backtest mode (e.g. "balanced").
+    max_candles:
+        Optional maximum candles to use (0 = all).
+    position_pct, risk_pct, reward_rr:
+        Default sizing parameters to use if the mapping file does not
+        provide a risk_model dict for this asset/timeframe.
+
+    Returns
+    -------
+    preamble_text, summary_text, result
+    """
+    # Infer asset and timeframe from the filename: <asset>_<timeframe>.csv
+    base = os.path.basename(asset_file)
+    name, _ext = os.path.splitext(base)
+    parts = name.split("_")
+    if len(parts) < 2:
+        raise ValueError(f"Cannot infer asset/timeframe from asset_file: {asset_file}")
+    asset = parts[0]
+    timeframe = "_".join(parts[1:])
+
+    mapping_set = load_mapping_set(mapping_path)
+    index = MappingIndex(mapping_set)
+    regime_map = index.build_regime_strategy_map(asset=asset, timeframe=timeframe)
+    if not regime_map:
+        raise ValueError(
+            f"No mappings found for asset={asset!r}, timeframe={timeframe!r} in mapping file: {mapping_path}"
+        )
+
+    # Determine effective sizing from the mapping's risk_model if present.
+    eff_position_pct = position_pct
+    eff_risk_pct = risk_pct
+    eff_reward_rr = reward_rr
+
+    try:
+        mappings_list = mapping_set.get("mappings", [])
+        selected_rm = None
+        for entry in mappings_list:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("asset")) != asset or str(entry.get("timeframe")) != timeframe:
+                continue
+            rm = entry.get("risk_model")
+            if isinstance(rm, dict) and rm:
+                selected_rm = rm
+                # First matching asset/timeframe wins for now; per-regime
+                # risk differentiation can be added in a later phase.
+                break
+
+        if selected_rm:
+            if "position_pct" in selected_rm:
+                try:
+                    eff_position_pct = float(selected_rm["position_pct"])
+                except Exception:
+                    pass
+            if "risk_pct" in selected_rm:
+                try:
+                    eff_risk_pct = float(selected_rm["risk_pct"])
+                except Exception:
+                    pass
+            if "reward_rr_override" in selected_rm:
+                try:
+                    eff_reward_rr = float(selected_rm["reward_rr_override"])
+                except Exception:
+                    pass
+    except Exception:
+        # Fail soft: if anything goes wrong while reading risk_model,
+        # we simply fall back to the explicit arguments.
+        pass
+
+    # Delegate to the existing single-backtest runner using the router.
+    return run_single_backtest(
+        asset_file=asset_file,
+        strategy_name="router_mapped",  # label only; router decides actual strategies
+        mode=mode,
+        use_router=True,
+        max_candles=max_candles,
+        strategy_mappings=regime_map,
+        position_pct=eff_position_pct,
+        risk_pct=eff_risk_pct,
+        reward_rr=eff_reward_rr,
+    )
+
 def run_all_strategies_backtest(
     asset_file: str,
     mode: str,
@@ -301,4 +415,4 @@ def run_all_assets_backtest(
     error_log = ("\n".join(error_lines) + "\n") if error_lines else ""
     return df_res, error_log
 
-# core/backtest_runner.py v1.3 (304 lines)
+# core/backtest_runner.py v1.5 (418 lines)

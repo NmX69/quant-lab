@@ -1,0 +1,23 @@
+{
+  "name": "Trending Base Template",
+  "regime": "trending",
+  "direction": "both",
+
+  "entry": {
+    "conditions": [
+      { "type": "macd_cross", "direction": "up" },
+      { "type": "adx", "above": 25 }
+    ]
+  },
+
+  "exit": {
+    "stop_loss": { "type": "atr", "multiple": 3.0 },
+    "take_profit": 0.10,
+    "partial_exit": 0.5
+  },
+
+  "risk": {
+    "sizing": "equity_pct",
+    "risk_per_trade_pct": 1.5
+  }
+}

@@ -28,6 +28,7 @@ from core.asset_fitness import (
 )
 from core import strategy_loader
 from gui.fitness_detail_window import FitnessDetailWindow
+from gui import fitness_mapping_export
 
 
 # ----------------------------------------------------------------------
@@ -320,7 +321,7 @@ class FitnessTabbedWindow(tk.Toplevel):
 
         ttk.Label(
             top,
-            text="Filter (asset / strategy / timeframe substring):",
+            text="Filter (asset/strategy/timeframe):",
         ).grid(row=0, column=0, sticky="w", padx=(0, 4))
         self.filter_var = tk.StringVar(value="")
         ttk.Entry(top, textvariable=self.filter_var).grid(row=0, column=1, sticky="ew", padx=(0, 4))
@@ -338,9 +339,12 @@ class FitnessTabbedWindow(tk.Toplevel):
         ttk.Button(top, text="Export JSON", command=self._export_json).grid(
             row=0, column=5, sticky="w", padx=(0, 4)
         )
+        ttk.Button(top, text="Export Mapping", command=self._export_mapping).grid(
+            row=0, column=6, sticky="w", padx=(12, 4)
+        )
 
         ttk.Button(top, text="Re-run Scan", command=self._on_rerun).grid(
-            row=0, column=6, sticky="w", padx=(12, 0)
+            row=0, column=7, sticky="w", padx=(12, 0)
         )
 
         # Treeview
@@ -719,6 +723,118 @@ class FitnessTabbedWindow(tk.Toplevel):
         except Exception as exc:
             messagebox.showerror("Export JSON", f"Failed to export JSON:\n{exc}")
 
+
+    def _export_mapping(self) -> None:
+        """Export Phase E best-config mapping file from the current fitness view."""
+        if self._current_df is None or self._current_df.empty:
+            messagebox.showinfo("Export Mapping", "No data available to export.")
+            return
+
+        rows = self._build_fitness_rows_for_mapping()
+        if not rows:
+            messagebox.showwarning(
+                "Export Mapping",
+                "Could not build any valid mapping records from the current data.",
+            )
+            return
+
+        fitness_mapping_export.export_best_config_schema_dialog(
+            parent=self,
+            fitness_rows=rows,
+        )
+
+    def _build_fitness_rows_for_mapping(self) -> List[Dict[str, Any]]:
+        """
+        Build generic fitness rows from the current DataFrame suitable for
+        core.asset_fitness_mapping.build_fitness_records_for_mapping.
+
+        This method makes minimal assumptions about column names and uses
+        _last_run_params for regime and risk_model fields. If certain
+        expected metrics are missing, those rows will be skipped later by
+        the core helper.
+        """
+        if self._current_df is None or self._current_df.empty:
+            return []
+
+        df = self._current_df.drop(columns=["__row_id"], errors="ignore")
+        rows: List[Dict[str, Any]] = []
+
+        params = self._last_run_params or {}
+        regime = str(params.get("mode", "balanced"))
+
+        # Base risk model derived from the GUI run parameters; additional
+        # fields can be added in the future without changing Phase E.
+        risk_model_base: Dict[str, Any] = {
+            "position_pct": float(params.get("position_pct", 0.0)),
+            "risk_pct": float(params.get("risk_pct", 0.0)),
+        }
+        reward_rr = params.get("reward_rr", None)
+        if reward_rr is not None:
+            try:
+                risk_model_base["reward_rr_override"] = float(reward_rr)
+            except (TypeError, ValueError):
+                pass
+
+        for _, row in df.iterrows():
+            rd = row.to_dict()
+
+            # Try several common column names for asset and timeframe so we
+            # remain compatible with existing fitness exports.
+            asset = (
+                rd.get("asset")
+                or rd.get("pair")
+                or rd.get("symbol")
+                or ""
+            )
+            asset = str(asset).strip()
+
+            timeframe = (
+                rd.get("timeframe")
+                or rd.get("tf")
+                or rd.get("time_frame")
+                or ""
+            )
+            timeframe = str(timeframe).strip()
+
+            raw_strategy_id = (
+                rd.get("strategy_id")
+                or rd.get("strategy_key")
+                or rd.get("strategy")
+            )
+            raw_strategy_name = rd.get("strategy_name")
+
+            if raw_strategy_id is not None and str(raw_strategy_id).strip():
+                strategy_id = str(raw_strategy_id).strip()
+            elif raw_strategy_name is not None and str(raw_strategy_name).strip():
+                strategy_id = str(raw_strategy_name).strip()
+            else:
+                # Cannot determine a usable strategy id
+                continue
+
+            strategy_name = str(raw_strategy_name or strategy_id)
+
+            if not asset or not timeframe or not strategy_id:
+                continue
+
+            fitness_row: Dict[str, Any] = {
+                "asset": asset,
+                "timeframe": timeframe,
+                "regime": regime,
+                "strategy_id": strategy_id,
+                "strategy_name": strategy_name,
+                "total_trades": rd.get("total_trades", rd.get("trades", 0)),
+                "total_return_pct": rd.get("total_return_pct", rd.get("return_pct", 0.0)),
+                "winrate_pct": rd.get("winrate_pct", rd.get("winrate", 0.0)),
+                "expectancy_R": rd.get("expectancy_R", rd.get("expectancy", 0.0)),
+                "max_dd_pct": rd.get("max_dd_pct", rd.get("max_drawdown_pct", 0.0)),
+                "stability_score": rd.get("stability_score", 0.0),
+                "risk_model": dict(risk_model_base),
+            }
+
+            rows.append(fitness_row)
+
+        return rows
+
     # ------------------------------------------------------------------
     # Restoring / re-running
     # ------------------------------------------------------------------
@@ -813,6 +929,4 @@ class FitnessTabbedWindow(tk.Toplevel):
             self._detail_window.destroy()
 
         self._detail_window = FitnessDetailWindow(self, row_data=row_data, title="Fitness Row Details")
-
-
-# gui/fitness_window.py v0.7 (818 lines)
+# gui/fitness_window.py v0.10 (932 lines)
