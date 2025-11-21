@@ -43,9 +43,12 @@ def create_left_panel(gui: Any) -> None:
     gui.file_combo.grid(row=2, column=1, columnspan=2, sticky="ew", pady=(0, 10))
 
     ttk.Label(left, text="STRATEGY").grid(row=3, column=0, sticky="w", pady=(0, 5))
-    gui.strategy_var = tk.StringVar(value=gui.config.get("strategy", ""))
+    gui.strategy_var = tk.StringVar(value=gui.config.get("strategy", "range_mean_reversion"))
     gui.strategy_combo = ttk.Combobox(
-        left, textvariable=gui.strategy_var, state="readonly"
+        left,
+        textvariable=gui.strategy_var,
+        values=[],
+        state="readonly",
     )
     gui.strategy_combo.grid(row=3, column=1, columnspan=2, sticky="ew", pady=(0, 10))
 
@@ -79,23 +82,14 @@ def create_left_panel(gui: Any) -> None:
         row=2, column=0, sticky="w", pady=2
     )
     gui.ranging_var = tk.StringVar(
-        value=gui.config.get("ranging_strategy", "range_rsi_bb")
+        value=gui.config.get("ranging_strategy", "range_mean_reversion")
     )
     gui.ranging_combo = ttk.Combobox(
         gui.router_frame, textvariable=gui.ranging_var, state="readonly"
     )
     gui.ranging_combo.grid(row=2, column=1, sticky="ew", padx=5)
 
-    ttk.Label(left, text="MODE").grid(row=5, column=0, sticky="w", pady=(8, 5))
-    gui.mode_var = tk.StringVar(value=gui.config.get("mode", "balanced"))
-    ttk.Combobox(
-        left,
-        textvariable=gui.mode_var,
-        values=["conservative", "balanced", "aggressive"],
-        state="readonly",
-    ).grid(row=5, column=1, columnspan=2, sticky="ew", pady=(0, 10))
-
-    ttk.Label(left, text="RUN MODE").grid(row=6, column=0, sticky="w", pady=(0, 5))
+    ttk.Label(left, text="RUN MODE").grid(row=5, column=0, sticky="w", pady=(10, 5))
     gui.run_mode_var = tk.StringVar(value=gui.config.get("run_mode", "Single"))
     gui.run_mode_combo = ttk.Combobox(
         left,
@@ -103,12 +97,77 @@ def create_left_panel(gui: Any) -> None:
         values=["Single", "All Strategies", "All Assets"],
         state="readonly",
     )
-    gui.run_mode_combo.grid(row=6, column=1, columnspan=2, sticky="ew", pady=(0, 10))
+    gui.run_mode_combo.grid(row=5, column=1, columnspan=2, sticky="ew", pady=(0, 10))
 
-    ttk.Label(left, text="MAX CANDLES").grid(row=7, column=0, sticky="w", pady=(0, 5))
-    gui.candles_var = tk.IntVar(value=gui.config.get("candles", 0))
-    ttk.Entry(left, textvariable=gui.candles_var).grid(
-        row=7, column=1, columnspan=2, sticky="ew", pady=(0, 10)
+    ttk.Label(left, text="POSITION % OF EQUITY").grid(
+        row=6, column=0, sticky="w", pady=(10, 5)
+    )
+    gui.position_pct_var = tk.DoubleVar(
+        value=gui.config.get("position_pct", 15.0)
+    )
+    ttk.Scale(
+        left,
+        from_=1,
+        to=50,
+        orient="horizontal",
+        variable=gui.position_pct_var,
+        length=200,
+    ).grid(row=6, column=1, sticky="ew", pady=(0, 5))
+    ttk.Label(
+        left,
+        textvariable=tk.StringVar(
+            value=f"{gui.position_pct_var.get():.1f}%"
+        ),
+    ).grid(row=6, column=2, sticky="w")
+
+    ttk.Label(left, text="RISK % PER TRADE").grid(
+        row=7, column=0, sticky="w", pady=(10, 5)
+    )
+    gui.risk_pct_var = tk.DoubleVar(
+        value=gui.config.get("risk_pct", 1.0)
+    )
+    ttk.Scale(
+        left,
+        from_=0.25,
+        to=5.0,
+        orient="horizontal",
+        variable=gui.risk_pct_var,
+        length=200,
+    ).grid(row=7, column=1, sticky="ew", pady=(0, 5))
+    ttk.Label(
+        left,
+        textvariable=tk.StringVar(
+            value=f"{gui.risk_pct_var.get():.2f}%"
+        ),
+    ).grid(row=7, column=2, sticky="w")
+
+    ttk.Label(left, text="REWARD : RISK (RR)").grid(
+        row=8, column=0, sticky="w", pady=(10, 5)
+    )
+    gui.rr_var = tk.DoubleVar(
+        value=gui.config.get("reward_rr", 2.0)
+    )
+    ttk.Scale(
+        left,
+        from_=1.0,
+        to=5.0,
+        orient="horizontal",
+        variable=gui.rr_var,
+        length=200,
+    ).grid(row=8, column=1, sticky="ew", pady=(0, 5))
+    ttk.Label(
+        left,
+        textvariable=tk.StringVar(
+            value=f"{gui.rr_var.get():.2f}x"
+        ),
+    ).grid(row=8, column=2, sticky="w")
+
+    ttk.Label(left, text="MAX CANDLES (0 = all)").grid(
+        row=9, column=0, sticky="w", pady=(10, 5)
+    )
+    gui.candles_var = tk.IntVar(value=gui.config.get("max_candles", 5000))
+    ttk.Entry(left, textvariable=gui.candles_var, width=10).grid(
+        row=9, column=1, sticky="w", pady=(0, 10)
     )
 
     gui.equity_var = tk.BooleanVar(value=gui.config.get("show_equity", True))
@@ -117,7 +176,7 @@ def create_left_panel(gui: Any) -> None:
         text="Show Equity Curve",
         variable=gui.equity_var,
         command=gui.toggle_equity_area,
-    ).grid(row=8, column=0, columnspan=3, sticky="w", pady=(0, 10))
+    ).grid(row=10, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
     gui.use_router_var = tk.BooleanVar(value=gui.config.get("use_router", False))
     ttk.Checkbutton(
@@ -125,10 +184,10 @@ def create_left_panel(gui: Any) -> None:
         text="Use Regime Router",
         variable=gui.use_router_var,
         command=gui.toggle_router_ui,
-    ).grid(row=9, column=0, columnspan=3, sticky="w", pady=(0, 10))
+    ).grid(row=11, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
     ttk.Button(left, text="RUN BACKTEST", command=gui.run_backtest).grid(
-        row=10, column=0, columnspan=3, pady=(10, 0)
+        row=12, column=0, columnspan=3, pady=(10, 0)
     )
 
 
@@ -140,84 +199,57 @@ def create_right_panel(gui: Any) -> None:
     right = ttk.Frame(gui.root, padding="20")
     right.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
     gui.root.grid_columnconfigure(1, weight=3)
+    gui.root.grid_rowconfigure(0, weight=1)
+
+    right.grid_columnconfigure(0, weight=1)
+    right.grid_columnconfigure(1, weight=0)
 
     gui.output_text = scrolledtext.ScrolledText(
         right,
-        wrap=tk.WORD,
+        wrap="none",
+        width=100,
+        height=30,
         bg="#0d1117",
         fg="#c9d1d9",
-        font=("Consolas", 14),
+        insertbackground="#c9d1d9",
+        font=("Consolas", 11),
     )
     gui.output_text.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 10))
-    right.grid_rowconfigure(0, weight=2)
+    right.grid_rowconfigure(0, weight=1)
 
-    risk_frame = ttk.LabelFrame(right, text="RISK / POSITION SETTINGS", padding=10)
-    risk_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-
-    gui.position_pct_var = tk.DoubleVar(value=gui.config.get("position_pct", 15.0))
-    ttk.Label(risk_frame, text="Position size (% of equity)").grid(
-        row=0, column=0, sticky="w"
+    ttk.Label(right, text="RISK SETTINGS SNAPSHOT").grid(
+        row=1, column=0, sticky="w", pady=(0, 5)
     )
-    tk.Scale(
-        risk_frame,
-        from_=1.0,
-        to=100.0,
-        orient=tk.HORIZONTAL,
-        resolution=1.0,
-        variable=gui.position_pct_var,
-        length=400,
-        showvalue=True,
-        bg="#0d1117",
-        fg="#c9d1d9",
-        highlightthickness=0,
-        font=("Consolas", 12),
-    ).grid(row=0, column=1, sticky="ew", padx=5, pady=2)
-
-    gui.risk_pct_var = tk.DoubleVar(value=gui.config.get("risk_pct", 1.0))
-    ttk.Label(risk_frame, text="Risk per trade (% of equity)").grid(
-        row=1, column=0, sticky="w"
+    gui.snapshot_label = ttk.Label(
+        right,
+        text="",
+        font=("Consolas", 10),
     )
-    tk.Scale(
-        risk_frame,
-        from_=0.5,
-        to=5.0,
-        orient=tk.HORIZONTAL,
-        resolution=0.1,
-        variable=gui.risk_pct_var,
-        length=400,
-        showvalue=True,
-        bg="#0d1117",
-        fg="#c9d1d9",
-        highlightthickness=0,
-        font=("Consolas", 12),
-    ).grid(row=1, column=1, sticky="ew", padx=5, pady=2)
+    gui.snapshot_label.grid(row=1, column=1, sticky="e", pady=(0, 5))
 
-    gui.rr_var = tk.DoubleVar(value=gui.config.get("reward_rr", 1.5))
-    ttk.Label(risk_frame, text="Reward : Risk").grid(row=2, column=0, sticky="w")
-    tk.Scale(
-        risk_frame,
-        from_=0.5,
-        to=5.0,
-        orient=tk.HORIZONTAL,
-        resolution=0.25,
-        variable=gui.rr_var,
-        length=400,
-        showvalue=True,
-        bg="#0d1117",
-        fg="#c9d1d9",
-        highlightthickness=0,
-        font=("Consolas", 12),
-    ).grid(row=2, column=1, sticky="ew", padx=5, pady=2)
+    gui.summary_label = ttk.Label(
+        right,
+        text="No backtest run yet.",
+        font=("Consolas", 11),
+        justify="left",
+    )
+    gui.summary_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
     ttk.Button(right, text="COPY OUTPUT", command=gui.copy_output).grid(
-        row=2, column=0, sticky="w", pady=(0, 10)
+        row=3, column=0, sticky="w", pady=(0, 10)
     )
+
+    # Equity curve area lives inside its own frame so the main GUI
+    # can show/hide it via BacktesterGUI._toggle_equity_area().
+    gui.equity_frame = ttk.Frame(right)
+    gui.equity_frame.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=10)
+    right.grid_rowconfigure(4, weight=1)
 
     gui.fig = Figure(figsize=(12, 4), dpi=100, facecolor="#0d1117")
-    gui.canvas = FigureCanvasTkAgg(gui.fig, master=right)
-    gui.canvas.get_tk_widget().grid(
-        row=3, column=0, columnspan=2, sticky="nsew", pady=10
-    )
-    right.grid_rowconfigure(3, weight=1)
+    gui.canvas = FigureCanvasTkAgg(gui.fig, master=gui.equity_frame)
+    gui.canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
 
-# gui/layout.py v0.1 (223 lines)
+    gui.equity_frame.grid_rowconfigure(0, weight=1)
+    gui.equity_frame.grid_columnconfigure(0, weight=1)
+
+# gui/layout.py v0.2 (255 lines)

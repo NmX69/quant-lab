@@ -1,0 +1,19 @@
+{
+  "strategies": [
+    "range_mean_reversion",
+    "range_rsi_bb",
+    "ranging_stochastic",
+    "trend_macd",
+    "trending_ema_crossover"
+  ],
+  "timeframes": [
+    "1h"
+  ],
+  "mode": "balanced",
+  "use_router": false,
+  "max_candles": 0,
+  "position_pct": 15.0,
+  "risk_pct": 1.0,
+  "reward_rr": null,
+  "tag": "gui_balanced_1h"
+}

@@ -1,5 +1,5 @@
 {
-  "name": "trend_macd",
+  "name": "Trending - MACD + ADX",
   "regime": "trending",
   "direction": "long",
   "entry": {

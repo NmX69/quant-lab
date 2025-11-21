@@ -1,664 +1,857 @@
-PROJECT.TXT — Quant Lab Master Specification
-Version v0.3 (2025–CURRENT)
+# QUANT LAB PROJECT PLAN - v2.0 (2025-11-20)
+# THE DEFINITIVE TRUTH AND ROADMAP — LOCKED
 
-0. AI USAGE INSTRUCTIONS — STRICT RULESET
+# **0. AI RULES (NON-NEGOTIABLE)**
 
-Every time you read this file, PRINT THE VERSION LINE ABOVE.
-This verifies the AI is using the correct revision.
+1. Never redesign or refactor finished phases without explicit instruction.
+2. Never add new directories, dependencies, or persistence without explicit user order.
+3. Only work on the current declared phase (right now = **Phase E**).
+4. Never move logic out of JSON strategies (SDL evolves only in Phase F, with explicit approval).
+5. Always answer user's question or provide any analysis before providing code blocks or files.
+6. Output full-file replacements only (or diffs if explicitly asked).
+7. Every Python file keeps the exact 4-line header + footer version tag.
+8. If unclear → ask; do not guess.
+9. Violating any rule above invalidates the entire response.
+10. If delivering a zip file, ensure it is VS Code–readable on Windows with proper CRLF, indentation, and no collapsed single-line returns. Deliver only new & changed files.
 
-This section overrides everything else.
-It governs ChatGPT, Grok, Claude, Gemini, local models, agent-mode systems, and all future tooling.
+---
 
-Violating any rule in Section 0 invalidates the output.
+# **QUANT-LAB & QUANT-LAB-LIVE**
 
-0.1 Mandatory Operational Rules
+## **Unified Master Project Definition, Architecture, and Engineering Plan**
 
-Every AI working on Quant Lab must:
+### *(Hybrid Format — Enterprise clarity + Modular practicality)*
 
-0.1.1 Read First
+---
 
-Read the entire project.txt before writing code.
+# **1. PROJECT OVERVIEW**
 
-Confirm active phase before making changes.
+Quant-Lab is a full-scale quantitative crypto research platform designed to:
 
-0.1.2 Follow Active Phase Only
+* Import and preprocess historical crypto market data
+* Define novel trading strategies using an SDL (Strategy Definition Language)
+* Evaluate these strategies under varying market regimes
+* Measure performance, robustness, and risk profiles
+* Optimize parameter sets and produce stable, deployable strategic templates
+* Provide extensive reporting, metrics, logs, GUI visualization, and fitness analysis
+* Support fully interactive GUI-driven backtesting and optimization workflows
 
-Execute only the current phase.
+Quant-Lab-Live (the sister system) extends this framework into the real world:
 
-No jumping ahead.
+* Paper trading
+* Live trading on MEXC (spot + futures)
+* Continuous real-time data consumption
+* Real-time regime evaluation
+* Strategy routing + risk-controlled execution
+* Divergence monitoring (Live vs Paper vs Backtest)
+* The “Hellmoon Scanner” for active multi-asset scanning, anomaly detection, and rapid trade opportunity identification
+* A unified strategy schema ensuring seamless transition from research → live deployment
 
-No scaffolding for future phases.
+Quant-Lab is **research + discovery**.
+Quant-Lab-Live is **execution + validation**.
 
-No “helpful” redesigns unless asked.
+Both share the same conceptual engine, strategy definitions, regime logic, and routing structure.
 
-0.1.3 File Modification Rules
+---
 
-Only modify files explicitly requested by the user.
+# **2. DESIGN PRINCIPLES**
 
-Never change unrelated modules.
+1. **Single Unified Engine**
+   No silos. Backtesting and live trading share the same internal engine modules wherever possible.
 
-Never rename files or directories unless ordered.
+2. **SDL-Driven Strategies**
+   Strategies expressed as JSON using a declarative definition language.
+   No Python editing required to add new strategies.
 
-0.1.4 Preserve Core Architecture
+3. **Regime-Aware Everything**
+   Market states control strategy selection, position sizing, risk exposure, and routing.
 
-The following principles are immutable:
+4. **Modular ≤ 500-line Components**
+   Clean, maintainable, AI-editable modules.
+   Prefer composition over inheritance.
 
-Unified backtest engine architecture
+5. **Backward Compatibility**
+   All future schemas (strategy, fitness, config) must remain compatible with the current SDL JSON and saved fitness engine outputs.
 
-JSON/SDL-based strategies (no logic in Python)
+6. **Real-World Fidelity**
+   Live trading will expose detailed divergences vs. backtests for continuous improvement of slippage models, latency assumptions, and execution risk.
 
-Regime-aware structure everywhere
+7. **Extensive Logging + Transparency**
+   Everything loggable is logged: trades, decisions, regimes, errors, routing, live/paper mismatches.
 
-Canonical trade logging
+8. **GUI-First for Usability**
+   Core workflows available through Tkinter GUI interfaces with detail windows, fitness dashboards, and reporting.
 
-Clean separation:
+---
 
-Engine logic
+# **3. CURRENT STATE OF CODEBASE (AS-IS)**
 
-Strategy DSL
+*(Derived directly from scanning the repo.)*
 
-Indicators
+### **core/engine.py**
 
-GUI
+* The heart of the backtesting engine
+* Handles trade execution, entry/exit logic, position sizing, fee modeling, order simulation
+* Regime-aware routing is delegated to `regime_router.py`
+* Reads and interprets strategy JSON from loader
 
-Reporting
+### **core/strategy_loader.py**
 
-State
+* Parses SDL JSON strategy files
+* Validates conditions, entries, exits
+* Produces runtime-friendly structures used by engine and optimizer
 
-Clear module boundaries (no “bleed” between concerns)
+### **core/conditions.py / core/exits.py**
 
-0.1.5 Ask Questions
+* Implements conditional logic and exit logic as defined in SDL
+* Fully decoupled from indicators
+* Pure evaluation functions
 
-If anything is ambiguous, the AI must ask for clarification.
+### **core/indicators.py**
 
-0.1.6 Never Assume Missing Files
+* All TA indicators: EMA, RSI, BB, ATR, stochastic, etc.
+* Bulk of technical functions used across strategies
 
-If a referenced module is not provided, the AI must request it.
+### **core/regime_router.py**
 
-0.2 File Output Protocol
-0.2.1 Full-File Replacement — PREFERRED
+* Evaluates market regime
+* Routes between “balanced,” “trending,” “ranging,” “custom” modes
+* Supports running regime-specific strategies
 
-Unless the user explicitly requests a diff, AI must:
+### **core/sizing.py**
 
-Answer questions first (analysis before code).
+* Centralized risk model
+* Position sizing logic using equity_pct, atr_pct, percent of wallet, etc.
 
-Summarize the problem.
+### **core/optimizer*.py**
 
-Summarize required changes.
+* Four optimizers: strategy, region, engine, and common utilities
+* Already supports fitness scoring, parameter sweeps, multi-strategy evaluation
+* Produces meaningful performance reports and fitness metrics
 
-Request the current version of each file to be modified.
+### **core/asset_fitness.py / core/fitness_cli.py**
 
-Output complete replacement files, one per code block:
+* Fitness engine to determine best strategies per asset/regime/timeframe
+* CLI + integration points for GUI / schema exporter
 
-# FILE: core/engine.py
-<entire file>
+### **core/results.py + core/results_builder.py + core/results_display.py**
 
+* Unified results abstraction
+* Building, formatting, and displaying results in GUI
 
-Only modify the files requested.
+### **core/config_manager.py**
 
-0.2.2 Diff Workflow — OPTIONAL
+* Load/merge config files
+* Manage runner options
+* Bridge GUI → backtesting engine
 
-Use diffs only when the user requests them.
-If using diffs:
+### **core/backtest_runner.py**
 
-AI must test-apply the diff internally before output.
+* Headless batch backtester
+* Used by GUI as an execution backend
 
-If diff fails when user applies it, AI must analyze why.
+### **gui/backtester_gui.py**
 
-0.2.3 Required File Footer Version Tag
+* Primary GUI
+* Strategy selection, parameter entry, risk model selection
+* Runs backtests, displays results, opens detail windows
+* Stable and functional
 
-Every Python file ends with:
+### **gui/fitness_detail_window.py**
 
-# core/engine.py v0.4
+* GUI for fitness engine output
+* Will be expanded to integrate “Save Best Schema → Quant-Lab-Live”
 
+### **data/**
 
-Rules:
+* CSV historical datasets
+* `manifest.json` for listing assets + metadata
 
-Must be the final line.
+---
 
-Version increments monotonically.
+# **4. FUTURE SYSTEM: QUANT-LAB-LIVE**
 
-Path must match the actual file path.
+Quant-Lab-Live extends the architecture without rewriting existing components.
 
-JSON files cannot have comments.
+## **4.1 Live Trading Engine**
 
-0.2.4 Required File Header Format (Per-File)
+Must include:
 
-Every Python file in the Quant Lab project must begin with a 3–4 line
-header using this exact convention:
+* Real-time price feed (WebSocket + REST fallback)
+* Real-time regime inference
+* Real-time strategy routing
+* Position management
+* Trade execution on MEXC spot/futures
+* Logging, monitoring, watchdog timers
+* Full hot-reload of strategy schemas
+* Paper mode, live mode, hybrid mode
 
-# core/engine.py
-# Purpose: <one clear sentence describing what this file does>
-# Major APIs: <comma-separated list of externally used functions/classes/objects>
-# Notes: <optional extra info, may be blank>
+Key idea:
+**Reuse `engine.py` as much as possible**, swapping out “simulated execution” with “real execution adapters.”
 
-Rules:
+## **4.2 Execution Adapters**
 
-- The first line must match the logical repo path (e.g., core/sizing.py).
-- Purpose must be a single clear sentence describing the module’s responsibility.
-- Major APIs must include only the public interface intended to be imported or used by other modules.
-- Notes is optional and may include constraints, future concerns, or AI guidance.
-- No executable code may appear before the header.
-- Header must be updated whenever a refactor changes the purpose or API surface.
+New modules under `core/live/`:
 
-For Example:
-# core/engine.py
-# Purpose: High-level orchestrator for running backtests; delegates real logic to submodules.
-# Major APIs: run_backtest
-# Notes: Must remain thin; heavy logic lives in sizing/conditions/exits/state.
+* **mexc_client.py**
+  REST & WebSocket wrapper (order book, tick data, order execution)
 
+* **execution_router.py**
+  Handles order placement, cancellation, slippage modeling
 
-0.3 Phase Lockout Protocol
+* **paper_engine.py**
+  Runs a live-paper simulation with the same signals but virtual funds
 
-Only the active phase may be worked on.
+## **4.3 Divergence Tracking**
 
-Closed phases cannot be modified.
+Quant-Lab-Live logs:
 
-Future phases cannot be implemented early.
+* Expected fill vs actual
+* Expected slippage vs actual
+* Strategy signal → trade execution latency
+* Missed opportunities vs backtest hypothetical
 
-A phase is complete only when the user declares it complete.
+Stored in:
 
-0.4 Strategy / SDL Governance
+* `core/live/divergence_log.py`
 
-Strategies are JSON-only plug-ins.
+Used to continuously refine:
 
-AI must:
+* Backtest slippage model
+* Backtest fill model
+* Risk exposure modeling
+* Expected vs realized volatility behavior
 
-Preserve schema.
+---
 
-Never alter JSON structure without explicit approval.
+# **5. HELLMOON SCANNER (QUANT-LAB-LIVE MODULE)**
 
-Never add new fields/operators/conditions without approval.
+## **5.1 Purpose**
 
-Never move logic from JSON into Python.
+Real-time scanning of **thousands of assets** (spot + futures) to detect:
 
-SDL Evolution Procedure
+* Sudden volume spikes
+* Orderbook asymmetry
+* Implied volatility expansion
+* Breakout conditions
+* Rapid regime shifts
+* Liquidation cascades
+* High-confidence directional anomalies
 
-To modify the DSL:
+## **5.2 Architecture**
 
-AI proposes change in English.
+New module:
+`core/live/hellmoon_scanner.py`
 
-User approves.
+## **5.3 Pipeline**
 
-AI updates project.txt with a new SDL spec section.
+1. Subscribe to MEXC tickers list
+2. Apply fast, vectorized real-time indicators
+3. Measure kurtosis, skew, microstructural imbalance
+4. Trigger signals when thresholds are crossed
+5. Immediately pass signals → Live Router
+6. Live Router checks regime
+7. If regime + strategy rules allow, open trade
 
-Only then can Python/JSON changes be made.
+## **5.4 Routing**
 
-0.5 Architectural Safety
+Hellmoon signals flow through the **same strategy schema and risk model** as normal strategies — they’re just “special-case, real-time-only triggers.”
 
-Before writing code, AI must ensure:
+---
 
-No cross-module side effects
+# **6. UNIFIED STRATEGY SCHEMA (BACKWARD COMPATIBLE)**
 
-No silent global changes
+The future schema must:
 
-No addition of external dependencies
+* Preserve all current JSON SDL entries
+* Add new, optional fields for live trading
+* Allow regime-specific additions without breaking old code
+* Support Hellmoon event handlers
+* Support dynamic risk overrides
+* Support live execution preferences
 
-No changes to directory layout
+### **6.1 Schema Versioning**
 
-No performance regressions
+Add a `"schema_version": "1.0"` key.
+Older files default to 1.0 if missing.
+Future versions remain backward-compatible.
 
-No removal of canonical logging fields
+### **6.2 Required New Fields**
 
-0.6 AI Workstyle Requirements
+```json
+"live_settings": {
+  "allowed_modes": ["live", "paper"],
+  "max_slippage_pct": 0.20,
+  "order_type": "market|limit|post-only",
+  "cancel_if_latency_ms": 250,
+  "hellmoon_compatible": true
+}
+```
 
-AI must:
+### **6.3 Fitness Export Schema**
 
-Be concise, analytical, and incremental.
+The fitness engine must produce a clean JSON output:
 
-Avoid scope creep.
+```json
+{
+  "asset": "BTCUSDT",
+  "timeframe": "1h",
+  "regime": "trending",
+  "strategy": "range_mean_reversion",
+  "parameters": { ... },
+  "risk_model": { ... },
+  "expected_performance": { ... },
+  "schema_version": "1.0"
+}
+```
 
-Keep explanations and code separated.
+This file loads directly into Quant-Lab-Live.
 
-Never output code before analysis.
+---
 
-Justify why each change is appropriate for the current phase.
+# **7. MODULARITY GOALS (< 500 lines / module)**
 
-0.7 When AI Must Decline
+All future modules should aim for:
 
-AI must refuse code when:
+* One clear job
+* No multi-hundred-line functions
+* No nested logic beyond 3 deep
+* 30–50 line function sweet spot
+* Clear top-level docstrings + file headers
 
-Missing context or missing files
+This maintains long-term AI/human editability.
 
-User asks for work from a locked or future phase
+---
 
-Task violates architectural rules
+# **8. FUTURE DIRECTORY STRUCTURE (TARGET)**
 
-Request is ambiguous
+```text
+quant-lab/
+    core/
+        engine.py
+        sizing.py
+        indicators.py
+        conditions.py
+        exits.py
+        regime_router.py
+        results.py
+        ...
+        live/
+            mexc_client.py
+            execution_router.py
+            paper_engine.py
+            divergence_log.py
+            hellmoon_scanner.py
+            data_feed.py
+    strategies/
+        *.json
+    gui/
+        backtester_gui.py
+        live_gui.py
+        fitness_detail_window.py
+    config/
+    data/
+    logs/
+quant-lab-live/
+    (thin wrapper calling /core/live)
+```
 
-AI should explain the reason and request clarification.
+---
 
-0.8 Enforcement Clause
+# **9. PHASE ROADMAP (LOCKED)**
 
-Any output violating Section 0 is invalid and must be discarded.
+**Current active phase: E — Strategy–Regime–Asset Mapping**
 
-1. PROJECT OVERVIEW
+### 9.0 Status Summary
 
-Quant Lab is a unified research and backtesting environment for multi-strategy cryptocurrency systems.
+* **Phase A — Canonical Trade Logging** → ✅ **COMPLETE**
+* **Phase B — Reporting Engine** → ✅ **COMPLETE** (`core/reporting.py` implemented & wired)
+* **Phase C — Parameter Optimizer** → ✅ **COMPLETE** (optimizer modules implemented)
+* **Phase D — Asset Fitness Tester** → ✅ **COMPLETE** (`asset_fitness` + CLI + GUI integration)
+* **Phase E — Strategy–Regime–Asset Mapping** → 🔵 **ACTIVE PHASE**
+* **Phase F — SDL Evolution** → ⏳ Not started (design + schema evolution)
+* **Phase G — Unified Portfolio Engine** → ⏳ Not started
+* **Phase H — Real-Time Scanners (incl. Hellmoon)** → ⏳ Not started
+* **Phase I — Multi-Timeframe System** → ⏳ Not started
+* **Phase J — Dashboard** → ⏳ Not started
+* **Phase K — Live Execution Engine (Quant-Lab-Live)** → ⏳ Not started
 
-Mission:
+Phases **E–K** are where the system moves from “backtest lab” to **full-stack quant platform + live / paper execution**, including the Hellmoon module.
 
-Run high-volume backtests across many assets
+---
 
-Evaluate strategies by regime and asset
+### 9.1 PHASE A — Canonical Trade Logging (✅ COMPLETE)
 
-Provide institutional-quality metrics
+**Goal**
+Establish a canonical trade log schema + internal plumbing so that all later reporting, optimization, and live comparison share one ground truth.
 
-Prepare for future portfolio engine and live trading
+**What’s already done**
 
-Core Philosophy:
+* **A.1 Canonical Trade Schema**
 
-Research-first
+  * Fields implemented: MAE, MFE, pnl_R, reward_multiple, stop_distance_pct, trade_type, hold_time_hours, timestamps, entry/exit prices, size, fee, regime, strategy ID, asset, timeframe.
+  * Stored and surfaced via `core.results`, `core.engine`, and GUI detail windows.
 
-JSON strategy plug-ins
+* **A.2 Engine & GUI Refactor**
 
-Transparent logging
+  * Engine split into modular components (engine, sizing, conditions, exits, indicators, `regime_router`, results).
+  * GUI (`gui/backtester_gui.py`, `gui/fitness_detail_window.py`) wired to the new reporting / results stack.
 
-Regime-aware logic
+**Optional polish (non-blocking, future)**
 
-Strong separation of concerns
+* Standardize log export schema docs (markdown spec).
+* Add explicit version field to TradeLog schema for long-term compatibility.
 
-Extensible long-term architecture
+---
 
-2. CORE DESIGN PRINCIPLES
+### 9.2 PHASE B — REPORTING ENGINE (✅ COMPLETE, WITH ROOM TO EXTEND)
 
-Unified Engine: Only one backtesting engine.
+**Goal**
+Produce rich analytics over the canonical trade logs: expectancy, R metrics, volatility, streaks, drawdowns, regime stats, exports.
 
-Strategy Plug-ins: Strategies defined only in JSON (SDL).
+**What’s already implemented**
 
-Regime Awareness: Search all conditions through a regime lens.
+* `core/reporting.py` with:
 
-Portfolio-Level Extensions: Reserved for future phases.
+  * Expectancy and win/loss R
+  * Basic streak metrics
+  * Drawdown-related metrics (via equity curve reconstruction)
+  * Regime breakdown logic (per-regime slicing)
+  * JSON + CSV export utilities
+  * Integration with `core.results` and GUI result views
 
-Timeframe Agnostic: Works for 1m → 1w.
+**Granular tasks & status**
 
-Transparent Logs: Every decision captured in TradeLog.
+* **B.1 Core Metrics** → ✅
+  Expectancy, winrate, avg win R, avg loss R, profit factor, MAR-like ratios.
 
-Scalable Architecture: Refactor completed to support future phases without monolithic files.
+* **B.2 Volatility & Distribution Metrics** → ✅ basic
+  Standard deviation of returns, equity volatility, drawdown stats.
 
-3. CURRENT CODE ARCHITECTURE (AFTER REFACTOR)
+* **B.3 Regime / Strategy / Asset Matrices** → ✅ basic
+  Grouped metrics by regime, strategy, asset/timeframe.
 
-This is the authoritative module map.
-Updated to match the project as of 2025-11.
+* **B.4 Exports (CSV, JSON)** → ✅
 
-Top-Level
-quant_lab.py
+  * `export_report_json` / `export_report_csv` implemented.
 
-Main entrypoint.
+* **B.5 GUI Surfacing** → ✅ initial
 
-Creates Tkinter root and starts BacktesterGUI.
+  * Backtester GUI already shows high-level metrics; detail window uses standardized result representations.
 
-config.json
+**Future refinements (optional, not blocking later phases)**
 
-Persisted GUI + engine settings.
+* Add Sortino and “true MAR” explicitly as labeled metrics.
+* Add equity-curve plotting helper (even if GUI doesn’t plot yet, the data is precalculated).
 
-Managed exclusively by core/config_manager.py.
+---
 
-getdata.py
+### 9.3 PHASE C — PARAMETER OPTIMIZER (✅ COMPLETE)
 
-Multi-year OHLCV downloader.
+**Goal**
+Explore strategy and risk parameter spaces via grid/EA-style sweeps and summarize fitness.
 
-Generates manifest.json.
+**What’s already there**
 
-verify_regime.py
+* `core/optimizer.py` facade and `core/optimizer_engine.py`, `core/optimizer_strategy.py`, `core/optimizer_region.py`, `core/optimizer_common.py`.
+* Functions for engine-level grid search, strategy parameter sweeps, and region filtering.
 
-CLI tool for verifying regime detection.
+**Granular breakdown**
 
-README.md
+* **C.1 Engine-Level Grid Search** → ✅
 
-Project overview.
+  * Sweep risk/position envelopes: R:R, stop widths, ATR multipliers, equity_pct ranges.
 
-project.txt
+* **C.2 Strategy Parameter Search** → ✅
 
-This file — canonical spec.
+  * Vary EMA lengths, stochastic thresholds, BB params, volatility filters per strategy.
 
-project_tree.txt
+* **C.3 Region Filters & Summaries** → ✅
 
-High-level file-purpose map.
+  * Summarize regions of parameter space with “good” performance.
+  * Select stable regions, not just single best points.
 
-Useful for new AI sessions.
+* **C.4 Integration with Reporting** → ✅
 
-core/
-core/engine.py
+  * Uses `core.reporting` metrics for fitness values.
+  * Feeds into asset fitness.
 
-High-level orchestrator for backtests.
+**Future enhancements (optional)**
 
-Coordinates sizing, conditions, exits, and state.
+* Multi-objective optimization (e.g., maximize expectancy while constraining drawdown).
+* Smarter sampling (Latin hypercube, adaptive search) for large parameter spaces.
 
-Calls helper modules; contains no heavy logic.
+---
 
-core/sizing.py
+### 9.4 PHASE D — ASSET FITNESS TESTER (✅ COMPLETE)
 
-All position-sizing and risk model logic.
+**Goal**
+Produce strategy × asset fitness matrices, regime distributions, and stability rankings.
 
-Supports equity_pct sizing model.
+**What exists now**
 
-Computes stop distances and take-profit, per GUI inputs.
+* `core/asset_fitness.py` plus `core/fitness_cli.py` and GUI integration via fitness detail window.
 
-core/conditions.py
+**Granular breakdown**
 
-All indicator-based condition evaluation.
+* **D.1 Fitness Matrix Generation** → ✅
 
-invert_condition() and evaluate_condition().
+  * `run_fitness_matrix` across strategy × asset × timeframe.
+  * Uses optimizer + reporting to compute metrics.
 
-Supports MACD/EMA/Stoch/RSI/BB/ADX/etc.
+* **D.2 Stability Metrics** → ✅
 
-core/exits.py
+  * `compute_stability_metrics` scores consistency across windows/regimes.
 
-All exit logic:
+* **D.3 Ranking & Export** → ✅
 
-Take profit
+  * `rank_assets_for_strategy`, `export_fitness_matrix` produce sorted lists and files.
 
-Stop loss
+* **D.4 GUI Presentation** → ✅ initial
 
-Trailing stop
+  * Fitness detail window already visualizes matrices and rankings.
 
-Signal-based exits
+**Key consequence**
+We already have **all the ingredients** to select “best-in-class” configurations per asset/regime/timeframe. Phase E formalizes this into a deployable schema.
 
-End-of-simulation closing
+---
 
-Builds TradeLog with canonical fields.
+### 9.5 PHASE E — STRATEGY–REGIME–ASSET MAPPING (🔵 ACTIVE PHASE)
 
-core/state.py
+**Goal**
+Autogenerate **router-ready schemas** that map:
+**(strategy, asset, timeframe, regime, risk model)** → “this is the configuration we should use live/paper.”
 
-Tracks:
+This is the bridge from **Quant-Lab** (research) to **Quant-Lab-Live** (deployment).
 
-Position
+**Subphases**
 
-Capital
+* **E.1 Canonical “Best Config” Schema Design**
 
-High/low watermarks
+  * Define a JSON schema (backward compatible) for:
 
-Entry metadata
+    * asset, timeframe, regime
+    * strategy name
+    * full parameter set (indicators, thresholds, risk model, fees assumptions)
+    * expected performance metrics snapshot
+    * meta: created_at, backtest_range, data source, schema_version
+  * Must be loadable by both backtester and future live engine.
+  * **This JSON file is the exact artifact that Quant-Lab-Live will later import and execute — no translation layer, no config drift.**
 
-Regime counters
+* **E.2 Mapping Generator**
 
-Equity curve
+  * Implement a function like:
+    `generate_mapping_from_fitness(fitness_matrix, selection_rules) -> List[BestConfig]`
+  * Selection rules sample:
 
-Trailing stop state
+    * Minimum trades, minimum expectancy, max drawdown, stability thresholds.
 
-core/results_builder.py
+* **E.3 Router Integration (Backtest Side)**
 
-Computes:
+  * Allow the current `regime_router` to load these mappings and run a “mapped configuration” backtest:
 
-Winrate
+    * “Run with preselected strategies per asset/regime/timeframe” instead of manually choosing ones.
 
-Sharpe
+* **E.4 GUI Integration**
 
-Max DD
+  * In fitness GUI:
 
-Final return
+    * Button: **“Export Best-Config Schema”**
+    * Option to export per asset, per regime, or full matrix.
 
-Builds BacktestResult and summary text.
+**Acceptance Criteria**
 
-core/backtest_runner.py
+* Given a completed fitness run, user can click **“Export Mapping”** and get a JSON file that the backtester can re-load and run directly as a “portfolio of best configurations.”
+* Files are stable and earmarked for Quant-Lab-Live consumption.
 
-Non-GUI orchestration layer for:
+---
 
-Single backtest
+### 9.6 PHASE F — SDL EVOLUTION (Schema-Safe)
 
-All strategies on one asset
+**Goal**
+Extend the Strategy Definition Language without breaking existing strategies or saved configs.
 
-All assets for one strategy
+**Subphases**
 
-Used only by GUI.
+* **F.1 Schema Versioning & Enforcement**
 
-core/config_manager.py
+  * Add `"schema_version"` field; default to `"1.0"` when absent.
+  * Create a lightweight validator for SDL JSON:
 
-Reads/writes config.json.
+    * Check required fields, allowed condition/exit types, types of thresholds, etc.
 
-Provides:
+* **F.2 Optional Inheritance**
 
-PROJECT_ROOT
+  * Allow `"extends": "base_strategy_name"` so that strategies can share and override components.
+  * Implement a resolver that produces flattened, resolved strategies for engine use.
 
-DATA_DIR
+* **F.3 Multi-Timeframe Support Hooks**
 
-RESULTS_DIR
+  * Extend SDL to optionally reference signals from higher/lower TFs:
 
-MANIFEST_FILE
+    * E.g., `"confirmations": [{"timeframe": "4h", "condition": "..."}]`
+  * Initially wired only on the backtest side; live execution integration comes in Phase I.
 
-core/indicators.py
+* **F.4 New Validated Condition Types**
 
-Adds indicators (MACD, EMAs, RSI, Stoch, BB, ADX).
+  * Add clearly defined condition primitives, e.g.:
 
-Adds regime classification.
+    * Breakout, volatility band expansions, orderbook-related placeholders (for future live).
+  * Keep legacy condition types untouched.
 
-Must be called before backtesting.
+**Acceptance Criteria**
 
-core/strategy_loader.py
+* Old JSON strategies load unmodified.
+* New SDL features are optional and validated.
+* Strategy loader can describe exactly why a malformed JSON is invalid.
 
-Loads JSON strategy files.
+---
 
-list_strategies(), get_strategy().
+### 9.7 PHASE G — UNIFIED PORTFOLIO ENGINE
 
-core/regime_router.py
+**Goal**
+Run multiple strategies across multiple assets and timeframes under a **global risk & exposure framework**, for both backtest and later live.
 
-Returns correct strategy JSON based on regime.
+**Subphases**
 
-core/results.py
+* **G.1 Portfolio State Model**
 
-Data models:
+  * Define an in-memory structure that tracks:
 
-TradeLog
+    * Per-asset positions, per-strategy positions, global exposures, margin use, max open risk.
 
-BacktestResult
+* **G.2 Exposure Constraints**
 
-Handles CSV save and summary_str().
+  * Implement rules like:
 
-gui/
-gui/backtester_gui.py
+    * Max portfolio DD, max per-asset risk, correlation buckets, per-regime caps.
+  * Enforce at order-generation time.
 
-Main GUI class.
+* **G.3 Dual Engine Modes**
 
-Manages:
+  * Intraday vs swing “sub-engines” sharing the same portfolio state, but with separate config.
 
-File/timeframe/strategy selection
+* **G.4 Backtest Integration**
 
-Router controls
+  * Adapt engine/backtest_runner so it can simulate a full portfolio run, not just single-strategy isolated runs.
 
-Mode selection
+**Acceptance Criteria**
 
-Position/risk/RR sliders
+* Backtests can simulate running N strategies across M assets with shared capital constraints.
+* Portfolio metrics (portfolio equity curve, combined drawdown) show up via reporting.
 
-Run buttons
+---
 
-Output text
+### 9.8 PHASE H — REAL-TIME SCANNERS (INCLUDING HELLMOON)
 
-Matplotlib canvas
+**Goal**
+Build real-time anomaly/alpha scanners for live markets; Hellmoon is the flagship module here.
 
-Calls backtest_runner functions.
+**Subphases**
 
-gui/layout.py
+* **H.1 Live Data Feed Abstraction**
 
-Builds left and right UI panels.
+  * Implement a `data_feed` module for streaming tick/candlestick/orderbook snapshots from MEXC.
 
-Extracted to reduce backtester_gui size.
+* **H.2 Generic Scanner Framework**
 
-gui/styles.py
+  * A system to plug in scanner “modules”:
 
-ttk style/theme setup.
+    * Volume spike detector, volatility expansion, orderbook skew, liquidation sweeps.
 
-Colors, fonts, button/combobox styles.
+* **H.3 Hellmoon Scanner**
 
-gui/results_display.py
+  * Implement `hellmoon_scanner` that:
 
-Equity curve plotting
+    * Monitors thousands of symbols.
+    * Evaluates regime + anomaly conditions.
+    * Emits **signal events** that can be processed like strategy signals.
 
-Summary formatting for tables
+* **H.4 Integration With Router & Risk**
 
-strategies/
+  * Hellmoon events go through the same risk / regime / routing layers as traditional signals:
 
-JSON strategy files defining:
+    * No bypassing the portfolio engine or risk caps.
 
-Entry conditions
+**Acceptance Criteria**
 
-Exit conditions
+* In live/paper mode, scanner logs detected events + whether trades were taken or rejected.
+* Hellmoon can be toggled on/off independently per mode (paper/live).
 
-Risk parameters
+---
 
-Current working strategies:
+### 9.9 PHASE I — MULTI-TIMEFRAME SYSTEM
 
-trend_macd.json
+**Goal**
+Support strategies that combine signals across 1m / 5m / 15m / 1h / 4h / 1d in a principled way.
 
-range_rsi_bb.json
+**Subphases**
 
-trending_ema_crossover.json
+* **I.1 Backtest MTF Data Model**
 
-ranging_stochastic.json
-(And others as added.)
+  * Mechanism to align multiple timeframes in memory with consistent indices.
 
-data/
+* **I.2 SDL MTF Execution**
 
-Raw OHLCV CSV files.
+  * Activate the multi-timeframe constructs introduced in Phase F:
 
-manifest.json describing available assets/timeframes.
+    * Higher-timeframe trend filters.
+    * Lower-timeframe entry triggers.
 
-results/
+* **I.3 Live MTF Execution**
 
-Stored trade logs (CSV) for each completed backtest.
+  * Manage subscriptions and caches for multiple TFs in the live data feed.
+  * Ensure evaluation order and time sync.
 
-4. PHASE ROADMAP (OFFICIAL)
-PHASE A — Canonical Trade Logging → 100% COMPLETE
+**Acceptance Criteria**
 
-Includes:
+* Backtests and live runs can enforce things like:
 
-All canonical fields (MAE/MFE, pnl_R, reward_multiple, stop_distance_pct, trade_type, hold_time_hours)
+  * “Trade only when 4h trend is up, 1h RSI in range, and 5m gives entry trigger.”
+* All handled through SDL + existing engine, not custom Python logic.
 
-Full architecture refactor to modular engine + modular GUI
+---
 
-NEXT ACTIVE PHASE → Phase B
+### 9.10 PHASE J — DASHBOARD (GUI / TUI / WEB)
 
-PHASE B — REPORTING ENGINE (NEXT)
+**Goal**
+Move from “backtester-only GUI” to holistic monitoring, including live and portfolio views.
 
-Implement core/reporting.py:
+**Subphases**
 
-Expectancy, win/loss R
+* **J.1 Backtester GUI Enhancements**
 
-Sortino, MAR
+  * Additional tabs for:
 
-Volatility of returns
+    * Portfolio summary (when G is done)
+    * Strategy–asset mappings (Phase E artifacts)
 
-Streaks
+* **J.2 Live Status Dashboard**
 
-Drawdown curve
+  * A new GUI (or eventually web dashboard) that shows:
 
-Regime breakdowns
+    * Current positions, unrealized PnL
+    * Active regimes, active strategies
+    * Scanner/Hellmoon hits
+    * Divergence metrics (backtest vs live model assumptions)
 
-Strategy/asset matrices
+* **J.3 CLI/TUI Extension (Optional)**
 
-CSV + JSON exports
+  * Basic text-based monitoring for headless environments.
 
-Plot suite
+**Acceptance Criteria**
 
-PHASE C — PARAMETER OPTIMIZER
+* User can run a single interface that shows both backtests and live engines at a high level without digging into logs.
 
-Grid/EA search across:
+---
 
-R:R
+### 9.11 PHASE K — LIVE EXECUTION ENGINE (QUANT-LAB-LIVE)
 
-Stop widths
+**Goal**
+Turn Quant-Lab from pure research into a **live and paper trading engine** on MEXC (spot + futures), while preserving the same logic as backtesting where possible.
 
-EMA lengths
+This is where **Quant-Lab-Live** formally branches from, but still reuses core modules.
 
-Stoch thresholds
+**Subphases**
 
-Volatility filters
+* **K.1 Exchange Client (MEXC)**
 
-ATR multipliers
+  * REST + WebSocket wrappers for:
 
-PHASE D — ASSET FITNESS TESTER
+    * Market data
+    * Order placement, modification, cancellation
+    * Account balances, positions, leverage, margin
 
-Produce:
+* **K.2 Execution Adapters**
 
-Strategy × asset expectancy matrix
+  * Separate adapters for:
 
-Regime distributions
+    * **Paper mode**: fill simulation using live data.
+    * **Live mode**: real orders, with safety checks and dry-run templates.
 
-Stability rankings
+* **K.3 Risk & Sanity Layers**
 
-PHASE E — STRATEGY–REGIME–ASSET MAPPING
+  * Hard kill-switches, max loss per day, per-position caps.
+  * Sanity rules: no crazy order types, no cross-leverage surprises.
 
-Autogenerate router mappings for live trading.
+* **K.4 Divergence Logging**
 
-PHASE F — SDL EVOLUTION
+  * For each trade:
 
-Add:
+    * Compare expected price/fill vs actual.
+    * Log slippage and missed opportunities.
+  * Feed this back to improve backtesting models.
 
-schema enforcement
+* **K.5 Integration With Mapping & Portfolio Engine**
 
-optional inheritance
+  * Quant-Lab-Live uses the Phase E mapping files + Phase G portfolio engine to decide:
 
-multi-timeframe entries
+    * Which strategies to run
+    * With what parameters
+    * Under what exposure constraints.
 
-new validated condition types
+**Acceptance Criteria**
 
-PHASE G — UNIFIED PORTFOLIO ENGINE
+* System can run **paper trading** using live data end-to-end.
+* After hardening, system can run **real trading** with all risk controls engaged.
+* Divergence logs clearly highlight model vs reality differences.
 
-Parallel intraday/swing engines with global exposure caps.
+---
 
-PHASE H — REAL-TIME SCANNERS
+# **10. FINAL VISION**
 
-Volume spike, moonshot engine, futures OI, flash reversals.
+Quant-Lab becomes:
 
-PHASE I — MULTI-TIMEFRAME SYSTEM
+* Your **research lab, optimizer, and strategy factory**
+* GUI-driven, modular, highly maintainable
+* Backed by a sophisticated SDL and regime/fitness system
 
-Combine 1m + 5m + 15m + 1h + 4h + 1d signals.
+Quant-Lab-Live becomes:
 
-PHASE J — DASHBOARD
+* Your **execution engine**,
+* real-world validator,
+* smart-learning trade executor,
+* integrated with Hellmoon for continuous alpha discovery.
 
-CLI TUI → Web dashboard.
+Both share the same DNA.
+Both evolve together.
+And both use the same schemas and strategy definitions.
 
-PHASE K — LIVE EXECUTION ENGINE
 
-Spot/futures execution, slippage model, position router.
+# **11. Known Challenges / Missing Features**
 
-5. STRATEGY LIST — CURRENT & PLANNED
-Current
+1. **Multi-timeframe backtesting**  
+   Still single-timeframe only. Phase I will fix this, but until then higher-TF filters are simulated or manual.
 
-Trend-MACD
+2. **True portfolio-level backtesting**  
+   Current runs are still “one asset / one strategy at a time” with isolated equity curves.  
+   Phase G (Unified Portfolio Engine) is the blocker for realistic concurrent exposure, correlation, and global risk caps.
 
-Range RSI/BB
+3. **Live / paper divergence baseline**  
+   No real-world slippage, latency, or fill-rate data yet → backtest assumptions are still optimistic.
 
-EMA crossover
+4. **SDL schema enforcement & documentation**  
+   No formal validator or versioned spec. Phase F will add this, but right now malformed JSON can silently fail or be misinterpreted.
 
-Stochastic ranging
+5. **Reward:Risk override persistence bug**  
+   When user overrides RR in GUI, the value is used in the run but not yet written back into fitness matrices or exported mappings (shows blank in some tables).
 
-Router modes
+6. **Router mappings are still manual**  
+   Phase E is literally the fix for this — right now you have to hand-edit the regime→strategy combos in the GUI.
 
-Planned
+7. **No production-grade error handling / watchdog in long fitness runs**  
+   If a single corrupt CSV or bad asset slips through manifest, the whole matrix can hang or crash without graceful skip + logging.
 
-Volume spike
+8. **Hellmoon / scanner logic not even stubbed**  
+   Phase H is empty — zero code, zero data feed, zero fast-path.
 
-Flash crash reversal
+9. **No web/dashboard or remote monitoring**  
+   Everything is local Tkinter only (Phase J).
 
-Moonshot breakout
+10. Throught the program strategies are listed like "trend_macd" instead the more friendly in-json name field: "Trending - MACD + ADX" in all windows....
 
-Weekly trend
+11. When the "Run Backtest" button is pressed, clear the output screen
 
-Futures composite
+12. Redo Optimizer windows to be like the tabbed Fitness windows and be full screen
 
-ATR multi-exit
-
-Harmonic multi-entry
-
-6. KNOWN CHALLENGES
-
-Multi-timeframe not implemented
-
-Reporting incomplete
-
-Scanners pending
-
-SDL schema incomplete
-
-Optimizer missing
-
-Portfolio engine missing
-
-Live trading pending
-
-7. CURRENT PHASE
-
-Phase A: COMPLETE
-Phase B: COMPLETE
-Phase C: NEXT
+# /project.txt v2.0 (857 lines)

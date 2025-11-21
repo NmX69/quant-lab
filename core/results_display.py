@@ -1,4 +1,4 @@
-# gui/results_display.py
+# core/results_display.py
 # Purpose: Handle equity plotting and textual formatting of multi-run summaries.
 # Major External Functions/Classes: plot_equity_curve, format_all_strategies_summary, format_all_assets_summary
 # Notes: GUI-agnostic helper functions; GUI passes in its Figure and trades/DataFrames.

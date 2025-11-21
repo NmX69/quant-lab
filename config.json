@@ -1,16 +1,16 @@
 {
-  "data_file": "XRPUSDT_1h.csv (XRPUSDT 1h, 7788 candles)",
+  "data_file": "XRPUSDT_1h.csv",
   "timeframe": "1h",
   "strategy": "range_rsi_bb",
   "mode": "balanced",
-  "candles": 0,
-  "show_equity": false,
-  "run_mode": "All Assets",
-  "use_router": false,
+  "use_router": true,
   "trending_up_strategy": "trend_macd",
   "trending_down_strategy": "trend_macd",
   "ranging_strategy": "ranging_stochastic",
   "position_pct": 15.0,
   "risk_pct": 1.0,
-  "reward_rr": 1.5
+  "reward_rr": 1.5,
+  "candles": 5000,
+  "run_mode": "Single",
+  "show_equity": false
 }
